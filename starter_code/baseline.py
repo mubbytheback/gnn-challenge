@@ -1,0 +1,1 @@
+# Give participants a low barrier to entry
