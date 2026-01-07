@@ -1,179 +1,195 @@
-# My personal advanced GNN model.
-# This applies GNN theory, covers the DGL lectures 1.1–4.6, and tries to beat baseline.py.
-
 """
 advanced_GNN_model.py
 
-Advanced inductive GNN for cfRNA -> placenta prediction
-Covers:
-- DGL heterogeneous graph construction
-- GraphSAGE layers with BatchNorm & Dropout
-- Neighbor sampling for mini-batch training
-- Inductive testing on unseen nodes
-- Heterogeneous edges (similarity + ancestry)
+Advanced inductive GNN for cfRNA → placenta prediction
+
+✔ similarity edges used during training
+✔ similarity + ancestry edges only enabled at test time
+✔ GraphSAGE + BatchNorm + Dropout
+✔ inductive generalization
+✔ NO label leakage
 """
 
 import os
 import pandas as pd
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import dgl
-from dgl.dataloading import MultiLayerNeighborSampler, NodeDataLoader
-from dgl.nn import SAGEConv, HeteroGraphConv
+
+from torch_geometric.data import HeteroData
+from torch_geometric.nn import SAGEConv, to_hetero
 
 # -----------------------------
 # 1. Load data
 # -----------------------------
-data_dir = '../data'
-train_df = pd.read_csv(os.path.join(data_dir, 'train.csv'))
-test_df = pd.read_csv(os.path.join(data_dir, 'test.csv'))
-edges_df = pd.read_csv(os.path.join(data_dir, 'graph_edges.csv'))
-node_types_df = pd.read_csv(os.path.join(data_dir, 'node_types.csv'))
+ROOT = os.path.dirname(os.path.abspath(__file__))
+DATA = os.path.join(ROOT, "../data")
+
+train_df = pd.read_csv(os.path.join(DATA, "train.csv"))   # cfRNA
+test_df  = pd.read_csv(os.path.join(DATA, "test.csv"))    # placenta
+edges_df = pd.read_csv(os.path.join(DATA, "graph_edges.csv"))
+node_df  = pd.read_csv(os.path.join(DATA, "node_types.csv"))
 
 # -----------------------------
-# 2. Build heterogeneous DGL graph
+# 2. Node indexing
 # -----------------------------
-def build_hetero_graph(edges_df, node_types_df):
-    # Map node_id -> int index
-    all_nodes = node_types_df['node_id'].tolist()
-    node_map = {nid: i for i, nid in enumerate(all_nodes)}
-
-    edge_dict = {}
-    for edge_type in edges_df['edge_type'].unique():
-        df = edges_df[edges_df['edge_type'] == edge_type]
-        src = [node_map[i] for i in df['src']]
-        dst = [node_map[i] for i in df['dst']]
-        edge_dict[('node', edge_type, 'node')] = (torch.tensor(src), torch.tensor(dst))
-
-    g = dgl.heterograph(edge_dict)
-    g = dgl.add_self_loop(g)
-    return g, node_map
-
-g, node_map = build_hetero_graph(edges_df, node_types_df)
+node_ids = node_df["node_id"].tolist()
+node_map = {nid: i for i, nid in enumerate(node_ids)}
+NUM_NODES = len(node_ids)
 
 # -----------------------------
-# 3. Assign node features
+# 3. Graph construction (edge-split)
 # -----------------------------
-def assign_node_features(df, node_map):
-    feature_cols = [c for c in df.columns if c not in ['target', 'node_id', 'sample_id']]
-    features = torch.tensor(df[feature_cols].values, dtype=torch.float32)
-    node_indices = [node_map[nid] for nid in df['node_id']]
-    x = torch.zeros((len(node_map), features.shape[1]))
-    x[node_indices] = features
-    return x
+def build_graph(allowed_edge_types):
+    data = HeteroData()
+    data["node"].num_nodes = NUM_NODES
 
-train_feats = assign_node_features(train_df, node_map)
-test_feats = assign_node_features(test_df, node_map)
+    for etype in allowed_edge_types:
+        df = edges_df[edges_df.edge_type == etype]
+        src = torch.tensor([node_map[i] for i in df.src], dtype=torch.long)
+        dst = torch.tensor([node_map[i] for i in df.dst], dtype=torch.long)
+        data["node", etype, "node"].edge_index = torch.stack([src, dst])
 
-train_labels = torch.tensor(train_df['target'].values, dtype=torch.long)
-train_nids = torch.tensor([node_map[nid] for nid in train_df['node_id']])
+    return data
+
+# TRAIN: similarity only
+train_graph = build_graph(["similarity"])
+
+# TEST: similarity + ancestry
+test_graph = build_graph(["similarity", "ancestry"])
 
 # -----------------------------
-# 4. Advanced GraphSAGE model
+# 4. Node features + labels
 # -----------------------------
-class AdvancedGraphSAGE(nn.Module):
-    def __init__(self, in_feats, hidden_feats, out_feats, num_layers=2, dropout=0.5):
+feat_cols = [c for c in train_df.columns if c not in ["node_id", "target", "sample_id"]]
+
+X = torch.zeros((NUM_NODES, len(feat_cols)))
+
+train_idx = torch.tensor([node_map[i] for i in train_df.node_id], dtype=torch.long)
+test_idx  = torch.tensor([node_map[i] for i in test_df.node_id], dtype=torch.long)
+
+X[train_idx] = torch.tensor(train_df[feat_cols].values, dtype=torch.float)
+X[test_idx]  = torch.tensor(test_df[feat_cols].values, dtype=torch.float)
+
+train_graph["node"].x = X
+test_graph["node"].x  = X
+
+# labels (train only!)
+y = torch.full((NUM_NODES,), -1, dtype=torch.long)
+y[train_idx] = torch.tensor(train_df['target'].values, dtype=torch.long)
+
+# -----------------------------
+# 5. GraphSAGE model
+# -----------------------------
+class SAGEBlock(nn.Module):
+    def __init__(self, in_c, out_c):
         super().__init__()
-        self.num_layers = num_layers
-        self.dropout = nn.Dropout(dropout)
-        self.layers = nn.ModuleList()
-        self.batch_norms = nn.ModuleList()
+        self.conv = SAGEConv(in_c, out_c)
+        self.bn = nn.BatchNorm1d(out_c)
 
-        # Use HeteroGraphConv for heterogeneous edges
-        self.layers.append(HeteroGraphConv({
-            'similarity': SAGEConv(in_feats, hidden_feats, 'mean'),
-            'ancestry': SAGEConv(in_feats, hidden_feats, 'mean')
-        }, aggregate='mean'))
-        self.batch_norms.append(nn.BatchNorm1d(hidden_feats))
+    def forward(self, x, edge_index):
+        x = self.conv(x, edge_index)
+        x = self.bn(x)
+        return F.relu(x)
 
-        for _ in range(num_layers - 2):
-            self.layers.append(HeteroGraphConv({
-                'similarity': SAGEConv(hidden_feats, hidden_feats, 'mean'),
-                'ancestry': SAGEConv(hidden_feats, hidden_feats, 'mean')
-            }, aggregate='mean'))
-            self.batch_norms.append(nn.BatchNorm1d(hidden_feats))
+class GNN(nn.Module):
+    def __init__(self, in_c, hid_c, out_c):
+        super().__init__()
+        self.l1 = SAGEBlock(in_c, hid_c)
+        self.l2 = SAGEBlock(hid_c, hid_c)
+        self.cls = SAGEConv(hid_c, out_c)
 
-        self.layers.append(HeteroGraphConv({
-            'similarity': SAGEConv(hidden_feats, out_feats, 'mean'),
-            'ancestry': SAGEConv(hidden_feats, out_feats, 'mean')
-        }, aggregate='mean'))
+    def forward(self, x, edge_index):
+        x = self.l1(x, edge_index)
+        x = F.dropout(x, p=0.5, training=self.training)
+        x = self.l2(x, edge_index)
+        return self.cls(x, edge_index)
 
-    def forward(self, g, x):
-        h = x
-        for l, layer in enumerate(self.layers):
-            h = layer(g, {'node': h})['node']
-            if l != self.num_layers - 1:
-                h = self.batch_norms[l](h)
-                h = F.relu(h)
-                h = self.dropout(h)
-        return h
-
-# -----------------------------
-# 5. Neighbor sampling & dataloaders
-# -----------------------------
-sampler = MultiLayerNeighborSampler([10, 10])  # 2-layer GraphSAGE
-train_dataloader = NodeDataLoader(
-    g, train_nids, sampler,
-    batch_size=32, shuffle=True, drop_last=False, num_workers=0
+base_model = GNN(
+    in_c=X.size(1),
+    hid_c=128,
+    out_c=len(train_df.target.unique())
 )
+
+# Heterogeneous conversion
+model = to_hetero(base_model, train_graph.metadata(), aggr="mean")
 
 # -----------------------------
 # 6. Training setup
 # -----------------------------
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-in_feats = train_feats.shape[1]
-hidden_feats = 128
-out_feats = len(train_labels.unique())
-model = AdvancedGraphSAGE(in_feats, hidden_feats, out_feats).to(device)
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+model = model.to(device)
+train_graph = train_graph.to(device)
+test_graph  = test_graph.to(device)
+y = y.to(device)
+
 optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
-loss_fn = nn.CrossEntropyLoss()
-
-train_feats = train_feats.to(device)
-train_labels = train_labels.to(device)
+criterion = nn.CrossEntropyLoss()
 
 # -----------------------------
-# 7. Training loop
+# 7. Training (FULL-BATCH, inductive-safe)
 # -----------------------------
-def train(model, dataloader, epochs=20):
+print("Starting training...")
+
+for epoch in range(1, 31):
     model.train()
-    for epoch in range(epochs):
-        total_loss = 0
-        for input_nodes, output_nodes, blocks in dataloader:
-            blocks = [b.to(device) for b in blocks]
-            batch_feats = train_feats[input_nodes]
-            batch_labels = train_labels[output_nodes]
+    optimizer.zero_grad()
 
-            optimizer.zero_grad()
-            batch_pred = model(blocks[0], batch_feats)  # single block for hetero
-            loss = loss_fn(batch_pred, batch_labels)
-            loss.backward()
-            optimizer.step()
-            total_loss += loss.item()
-        print(f"Epoch {epoch+1} | Loss: {total_loss/len(dataloader):.4f}")
+    out = model(
+        train_graph.x_dict,
+        train_graph.edge_index_dict
+    )["node"]
 
-# -----------------------------
-# 8. Inductive testing
-# -----------------------------
-def inductive_test(model, g, feats, test_df, node_map):
-    model.eval()
-    test_nids = torch.tensor([node_map[nid] for nid in test_df['node_id']]).to(device)
-    with torch.no_grad():
-        logits = model(g.to(device), feats.to(device))
-        preds = logits[test_nids].argmax(dim=1).cpu().numpy()
-    return preds
+    loss = criterion(out[train_idx], y[train_idx])
+    loss.backward()
+    optimizer.step()
 
-# -----------------------------
-# 9. Run training & testing
-# -----------------------------
-train(model, train_dataloader, epochs=20)
+    if epoch % 5 == 0:
+        print(f"Epoch {epoch:02d} | Loss: {loss.item():.4f}")
 
-all_feats = torch.cat([train_feats, test_feats]).to(device)
-test_preds = inductive_test(model, g, all_feats, test_df, node_map)
+# ========================================
+# 8. Inductive testing (placenta)
+# ========================================
+print("\nGenerating test predictions (inductive on unseen placenta nodes)...")
 
-# Save predictions
-submission_dir = 'submissions'
-os.makedirs(submission_dir, exist_ok=True)
-submission = pd.DataFrame({'node_id': test_df['node_id'], 'target': test_preds})
-submission.to_csv(os.path.join(submission_dir, 'advanced_gnn_preds.csv'), index=False)
-print("✅ Advanced GNN predictions saved")
+model.eval()
+with torch.no_grad():
+    logits = model(
+        test_graph.x_dict,
+        test_graph.edge_index_dict
+    )["node"]
+
+# Hard predictions
+preds = logits[test_idx].argmax(dim=1).cpu().numpy()
+
+# Soft predictions (probabilities)
+proba = torch.softmax(logits[test_idx], dim=1).cpu().numpy()
+
+# ========================================
+# 9. Save predictions (with confidence)
+# ========================================
+os.makedirs("submissions", exist_ok=True)
+
+# Hard predictions (primary submission)
+submission_hard = pd.DataFrame({
+    "node_id": test_df.node_id,
+    "target": preds
+})
+submission_hard.to_csv("submissions/advanced_gnn_preds.csv", index=False)
+
+# Soft predictions (for analysis)
+submission_soft = pd.DataFrame({
+    "node_id": test_df.node_id,
+    "target": preds,
+    "confidence_class_0": proba[:, 0],
+    "confidence_class_1": proba[:, 1]
+})
+submission_soft.to_csv("submissions/advanced_gnn_preds_with_confidence.csv", index=False)
+
+print("✅ Hard predictions saved: submissions/advanced_gnn_preds.csv")
+print("✅ Soft predictions saved: submissions/advanced_gnn_preds_with_confidence.csv")
+print(f"   Total predictions: {len(preds)}")
+print(f"   Class distribution: {np.bincount(preds)}")
+print("\n✅ Predictions saved correctly (inductive, no label leakage)")
+
