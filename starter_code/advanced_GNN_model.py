@@ -30,6 +30,7 @@ DATA = os.path.join(ROOT, "../data")
 
 train_df = pd.read_csv(os.path.join(DATA, "train.csv"))   # cfRNA
 test_df  = pd.read_csv(os.path.join(DATA, "test.csv"))    # placenta
+test_labels = pd.read_csv(os.path.join(DATA, "test_labels.csv"), index_col=0)  # True labels for test set
 edges_df = pd.read_csv(os.path.join(DATA, "graph_edges.csv"))
 node_df  = pd.read_csv(os.path.join(DATA, "node_types.csv"))
 
@@ -157,11 +158,12 @@ class GNN(nn.Module):
         return self.cls(x, edge_index)
 
 num_classes = len(train_df[target_col].unique())
-base_model = GNN(X.size(1), hid_c=128, out_c=num_classes)
+base_model = GNN(X.size(1), hid_c=256, out_c=num_classes)
 model = to_hetero(base_model, train_graph.metadata(), aggr="mean")
 
+
 # -----------------------------
-# 7. Training setup
+# 7. Training setup with stronger class weights
 # -----------------------------
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model = model.to(device)
@@ -169,15 +171,22 @@ train_graph = train_graph.to(device)
 test_graph = test_graph.to(device)
 y = y.to(device)
 
-# Compute class weights safely
+# Correct class weighting (inverse frequency)
+num_samples = len(train_df)
 class_counts = train_df[target_col].value_counts()
+
+# Compute inverse-frequency weights
 weights = torch.tensor([
-    class_counts.get(1, 0)/class_counts.sum(),
-    class_counts.get(0, 0)/class_counts.sum()
+    num_samples / (2 * class_counts.get(0, 1)),  # control
+    num_samples / (2 * class_counts.get(1, 1))   # preeclampsia
 ], dtype=torch.float).to(device)
 
 criterion = nn.CrossEntropyLoss(weight=weights)
+print(f"Using class weights: {weights.cpu().numpy()}")
+
+
 optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+
 
 # -----------------------------
 # 8. Training (FULL-BATCH, inductive-safe)
@@ -229,13 +238,11 @@ print(f"     FN={train_cm[1,0]:3d}  TP={train_cm[1,1]:3d}")
 
 # Test set prediction statistics
 print("\n" + "="*70)
-print("  🔮 TEST SET PREDICTIONS (INDUCTIVE - PLACENTA)")
+print("  🔮 TEST SET PREDICTIONS & EVALUATION (INDUCTIVE - PLACENTA)")
 print("="*70)
-print("\n⚠️  NOTE: Test set is inductive (no ground truth labels available)")
-print("   Predictions are from model trained on cfRNA (training set)\n")
 
 pred_counts = np.bincount(preds, minlength=2)
-print(f"📌 Predicted Labels for {len(preds)} Placenta Nodes:")
+print(f"\n📌 Predicted Labels for {len(preds)} Placenta Nodes:")
 print(f"   Class 0 (control):       {pred_counts[0]:3d} nodes ({pred_counts[0]/len(preds)*100:.1f}%)")
 print(f"   Class 1 (preeclampsia):  {pred_counts[1]:3d} nodes ({pred_counts[1]/len(preds)*100:.1f}%)")
 
@@ -253,6 +260,46 @@ med_conf_mask = (max_conf >= 0.7) & (max_conf < 0.9)
 print(f"   Medium confidence (0.70-0.89): {med_conf_mask.sum()} predictions ({med_conf_mask.sum()/len(preds)*100:.1f}%)")
 low_conf_mask = max_conf < 0.7
 print(f"   Low confidence (<0.70): {low_conf_mask.sum()} predictions ({low_conf_mask.sum()/len(preds)*100:.1f}%)")
+
+# Test set evaluation against true labels
+print("\n" + "="*70)
+print("  📊 TEST SET EVALUATION METRICS (Against True Labels)")
+print("="*70)
+
+# Get true labels for test set (aligned with test_df order)
+test_true = test_labels.iloc[:, 0].values.astype(int)
+
+test_acc = accuracy_score(test_true, preds)
+test_prec = precision_score(test_true, preds, zero_division=0)
+test_rec = recall_score(test_true, preds, zero_division=0)
+test_f1 = f1_score(test_true, preds, zero_division=0)
+test_cm = confusion_matrix(test_true, preds)
+
+print(f"\n  Accuracy:     {test_acc:.4f}")
+print(f"  Precision:    {test_prec:.4f}")
+print(f"  Recall:       {test_rec:.4f}")
+print(f"  F1-Score:     {test_f1:.4f}")
+print(f"\n  Confusion Matrix:")
+print(f"     TN={test_cm[0,0]:3d}  FP={test_cm[0,1]:3d}")
+print(f"     FN={test_cm[1,0]:3d}  TP={test_cm[1,1]:3d}")
+
+
+# Test set prediction breakdown by class
+print(f"\n📊 Prediction Breakdown by True Label:")
+print(f"   True Class 0 samples: {(test_true == 0).sum()} nodes")
+print(f"   True Class 1 samples: {(test_true == 1).sum()} nodes")
+
+# Breakdown by correct/incorrect predictions
+correct_mask = preds == test_true
+incorrect_mask = preds != test_true
+
+print(f"\n   Correct predictions: {correct_mask.sum()} ({correct_mask.sum()/len(preds)*100:.1f}%)")
+print(f"   Incorrect predictions: {incorrect_mask.sum()} ({incorrect_mask.sum()/len(preds)*100:.1f}%)")
+
+if correct_mask.sum() > 0:
+    print(f"   Mean confidence (correct): {max_conf[correct_mask].mean():.4f}")
+if incorrect_mask.sum() > 0:
+    print(f"   Mean confidence (incorrect): {max_conf[incorrect_mask].mean():.4f}")
 
 print("\n" + "="*70)
 

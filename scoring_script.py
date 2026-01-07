@@ -178,7 +178,7 @@ if __name__ == "__main__":
     
     # Example usage
     submission_file = "submissions/advanced_gnn_preds.csv"
-    ground_truth_file = "data/test.csv"  # Will only work if test.csv has labels
+    ground_truth_file = "data/test_labels.csv"  # True labels for test set
     
     if len(sys.argv) > 1:
         submission_file = sys.argv[1]
@@ -188,6 +188,11 @@ if __name__ == "__main__":
     
     if os.path.exists(submission_file):
         print(f"\n📂 Submission: {submission_file}")
+        print(f"   Ground truth: {ground_truth_file}")
         metrics = evaluate_submission(submission_file, ground_truth_file)
     else:
         print(f"❌ Submission file not found: {submission_file}")
+        print(f"\nUsage: python scoring_script.py <submission_file.csv> [ground_truth_file.csv]")
+        print(f"\nExample:")
+        print(f"  python scoring_script.py submissions/advanced_gnn_preds.csv")
+        print(f"  python scoring_script.py submissions/baseline_preds.csv")
