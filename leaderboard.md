@@ -13,6 +13,7 @@
 | 1 | Advanced GNN (GraphSAGE) | 0.8421 | 0.8387 | 0.8571 | 0.8276 | 2026-01-07 | organizers |
 | 2 | Baseline MLP | 0.7845 | 0.7742 | 0.8019 | 0.7597 | 2026-01-07 | organizers |
 
+
 ## Submissions Log
 
 ### Advanced GNN (GraphSAGE)
