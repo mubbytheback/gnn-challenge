@@ -2,7 +2,7 @@
 # 🧬 GNN Challenge: cfRNA → Placenta Inductive GNN for Maternal-Fetal Health Prediction
 
 <div align="center">
-    <img src="images/IMG1.png" width='850' /> 
+    <img src="images/IMG1.png" width='650' /> 
 </div>
 
 <br>
