@@ -15,10 +15,10 @@
 
 ### Alignment with [BASIRA Lab's](https://basira-lab.com) Mission
 - Prioritizes robust generalization across heterogeneous datasets.  
-- Uses compute-efficient, non–data-hungry graph learning methods** that can run on standard hardware.  
+- Uses compute-efficient, non–data-hungry graph learning methods that can run on standard hardware.  
 
 ### Inspiration from GNN Literature
-- Draws from studies on inductive learning, message passing, and representation transfer**.  
+- Draws from studies on inductive learning, message passing, and representation transfer.  
 - Model design follows [**DGL Lectures 1.1–4.6**](https://www.youtube.com/watch?v=gQRV_jUyaDw&list=PLug43ldmRSo14Y_vt7S6vanPGh-JpHR7T), covering:  
   - Graph construction from tabular data  
   - Node feature encoding  
