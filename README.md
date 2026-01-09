@@ -76,7 +76,6 @@
 **Objective:** Implement an **advanced inductive GNN** for cfRNA → placenta prediction, ensuring **generalizable node representations** and **inductive learning**.  
 
 <div align="center">
-    <h1> 🗣️ Speech-to-Speech Retrieval-Augmented Assistant (Bruce)</h1>
     <img src="IMG2.PNG" width='650' /> 
 </div>
 
