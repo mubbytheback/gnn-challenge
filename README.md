@@ -1,7 +1,12 @@
 
 # 🧬 GNN Challenge: cfRNA → Placenta Inductive GNN for Maternal-Fetal Health Prediction
 
-![Project Screenshot](./images/IMG1.PNG)
+<div align="center">
+    <img src="images/IMG2.png" width='650' /> 
+</div>
+
+<br>
+<br
 
 ### Scientific Focus
 - Inductive graph learning across **cfRNA** and **placental transcriptomics** to detect maternal-fetal health issues.  
@@ -71,9 +76,8 @@
 
 ---
 
-## Advanced GNN Implementation [(`advanced_GNN_model.py`)](./starter_code/advanced_GNN_model.py)
 
-**Objective:** Implement an **advanced inductive GNN** for cfRNA → placenta prediction, ensuring **generalizable node representations** and **inductive learning**.  
+## Advanced GNN Implementation [(`advanced_GNN_model.py`)](./starter_code/advanced_GNN_model.py)
 
 <div align="center">
     <img src="images/IMG1.png" width='650' /> 
@@ -81,6 +85,10 @@
 
 <br>
 <br
+
+**Objective:** Implement an **advanced inductive GNN** for cfRNA → placenta prediction, ensuring **generalizable node representations** and **inductive learning**.  
+
+
 
 
 **Key Components:**  
