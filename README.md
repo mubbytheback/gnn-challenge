@@ -2,7 +2,7 @@
 # 🧬 GNN Challenge: cfRNA → Placenta Inductive GNN for Maternal-Fetal Health Prediction
 
 <div align="center">
-    <img src="images/IMG2.png" width='650' /> 
+    <img src="images/IMG1.png" width='650' /> 
 </div>
 
 <br>
@@ -80,7 +80,7 @@
 ## Advanced GNN Implementation [(`advanced_GNN_model.py`)](./starter_code/advanced_GNN_model.py)
 
 <div align="center">
-    <img src="images/IMG1.png" width='650' /> 
+    <img src="images/IMG2.png" width='650' /> 
 </div>
 
 <br>
