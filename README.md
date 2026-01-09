@@ -76,7 +76,7 @@
 **Objective:** Implement an **advanced inductive GNN** for cfRNA → placenta prediction, ensuring **generalizable node representations** and **inductive learning**.  
 
 <div align="center">
-    <img src="IMG2.PNG" width='650' /> 
+    <img src="images/IMG1.png" width='650' /> 
 </div>
 
 <br>
