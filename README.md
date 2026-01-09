@@ -13,7 +13,7 @@
 - Inductive graph learning across **cfRNA** and **placental transcriptomics** to detect maternal-fetal health issues.  
 - Learn **transferable representations** that generalize to unseen samples and domains rather than treating each dataset independently.  
 
-### Alignment with [BASIRA's](https://basira-lab.com) Mission
+### Alignment with [BASIRA Lab's](https://basira-lab.com) Mission
 - Prioritizes robust generalization across heterogeneous datasets.  
 - Uses compute-efficient, non–data-hungry graph learning methods** that can run on standard hardware.  
 
