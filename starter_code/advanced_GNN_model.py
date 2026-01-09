@@ -1,15 +1,3 @@
-"""
-advanced_GNN_model.py
-
-Advanced inductive GNN for cfRNA → placenta prediction
-
-✔ similarity edges used during training
-✔ similarity + ancestry edges only enabled at test time
-✔ GraphSAGE + BatchNorm + Dropout
-✔ inductive generalization
-✔ NO label leakage
-✔ Handles float/int target issues & class weighting
-"""
 
 import os
 import pandas as pd
@@ -18,6 +6,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
+from torch_geometric.loader import NeighborLoader
 
 from torch_geometric.data import HeteroData
 from torch_geometric.nn import SAGEConv, to_hetero
@@ -189,6 +178,47 @@ optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
 
 
 # -----------------------------
+# 8. Training (Neighborhood Mini-Batch)
+# -----------------------------
+# Define number of neighbors to sample at each GraphSAGE layer (2 layers)
+num_neighbors = {etype: [10, 10] for etype in train_graph.edge_types}  # adjust 10→other number if needed
+
+train_loader = NeighborLoader(
+    train_graph,
+    input_nodes=("node", train_idx),  # only nodes with labels
+    num_neighbors=num_neighbors,      # neighbors per layer per edge type
+    batch_size=64,                    # adjust based on GPU memory
+    shuffle=True
+)
+
+print("Starting neighborhood mini-batch training...")
+for epoch in range(1, 31):
+    model.train()
+    total_loss = 0
+    for batch in train_loader:
+        batch = batch.to(device)
+        optimizer.zero_grad()
+        
+        # Forward pass on sampled subgraph
+        out = model(batch.x_dict, batch.edge_index_dict)["node"]
+        
+        # Root nodes are the batch nodes we compute loss on
+        root_nodes = torch.arange(batch.batch_size_dict["node"], device=device)
+        batch_labels = batch.y[root_nodes]
+
+        loss = criterion(out[root_nodes], batch_labels)
+        loss.backward()
+        optimizer.step()
+        total_loss += loss.item()
+    
+    if epoch % 5 == 0:
+        avg_loss = total_loss / len(train_loader)
+        print(f"Epoch {epoch:02d} | Avg Loss: {avg_loss:.4f}")
+
+
+
+
+'''# -----------------------------
 # 8. Training (FULL-BATCH, inductive-safe)
 # -----------------------------
 print("Starting training...")
@@ -200,7 +230,7 @@ for epoch in range(1, 31):
     loss.backward()
     optimizer.step()
     if epoch % 5 == 0:
-        print(f"Epoch {epoch:02d} | Loss: {loss.item():.4f}")
+        print(f"Epoch {epoch:02d} | Loss: {loss.item():.4f}")'''
 
 # -----------------------------
 # 9. Inductive testing (placenta)
