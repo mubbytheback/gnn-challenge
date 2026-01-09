@@ -115,21 +115,8 @@ View the [leaderboard.md](leaderboard.md) for current rankings.
 
 ## Common Approaches
 
-### Approach 1: Machine Learning Baseline
-```python
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.preprocessing import StandardScaler
 
-scaler = StandardScaler()
-X_train_scaled = scaler.fit_transform(X_train)
-X_test_scaled = scaler.transform(X_test)
-
-model = RandomForestClassifier(n_estimators=100, random_state=42)
-model.fit(X_train_scaled, y_train)
-predictions = model.predict(X_test_scaled)
-```
-
-### Approach 2: Deep Learning MLP
+### Approach 1: Deep Learning MLP
 ```python
 import torch.nn as nn
 
@@ -150,7 +137,7 @@ class MLP(nn.Module):
         return self.net(x)
 ```
 
-### Approach 3: Graph Neural Networks
+### Approach 2: Graph Neural Networks
 ```python
 from torch_geometric.nn import GraphSAGE
 from torch_geometric.data import HeteroData

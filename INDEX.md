@@ -90,10 +90,9 @@ Each submission is evaluated on:
 
 ### Step 2: Train Your Model
 Use any approach:
-- Machine Learning (Random Forest, SVM, etc.)
-- Deep Learning (MLP, CNN, etc.)
+- Deep Learning (MLP)
 - Graph Neural Networks (GCN, GraphSAGE, etc.)
-- Ensemble methods
+
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for example code.
 
