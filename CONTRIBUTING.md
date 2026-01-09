@@ -87,15 +87,14 @@ placenta_1,0,0.92,0.08
 
 ## Model Guidelines
 
-### Do's ✅
+### Do's 
 - Use only the provided training data (`train.csv`)
 - Leverage gene expression features (harmonized across datasets)
 - Use the graph structure (`graph_edges.csv`) for GNN approaches
 - Implement proper train/test splits for development
 - Document your approach clearly
 
-### Don'ts ❌
-- Don't use the test labels (`test_labels.csv`) for training
+### Don'ts 
 - Don't use external data sources
 - Don't share code/ideas from other participants (without permission)
 - Don't submit duplicate models
