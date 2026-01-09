@@ -7,7 +7,7 @@
 - Inductive graph learning across **cfRNA** and **placental transcriptomics** to detect maternal-fetal health issues.  
 - Learn **transferable representations** that generalize to unseen samples and domains rather than treating each dataset independently.  
 
-### Alignment with BASIRA’s Mission
+### Alignment with [BASIRA's](https://basira-lab.com) Mission
 - Prioritizes **robust generalization** across heterogeneous datasets.  
 - Uses **compute-efficient, non–data-hungry graph learning methods** that can run on standard hardware.  
 
@@ -75,7 +75,14 @@
 
 **Objective:** Implement an **advanced inductive GNN** for cfRNA → placenta prediction, ensuring **generalizable node representations** and **inductive learning**.  
 
-![Project Screenshot](./images/IMG2.PNG)
+<div align="center">
+    <h1> 🗣️ Speech-to-Speech Retrieval-Augmented Assistant (Bruce)</h1>
+    <img src="IMG2.PNG" width='650' /> 
+</div>
+
+<br>
+<br
+
 
 **Key Components:**  
 - **Graph Construction:** Build hetero-graphs using **similarity and ancestry edges**.  
