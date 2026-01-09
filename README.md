@@ -8,6 +8,7 @@
 <br>
 <br
 
+
 ### Scientific Focus
 - Inductive graph learning across **cfRNA** and **placental transcriptomics** to detect maternal-fetal health issues.  
 - Learn **transferable representations** that generalize to unseen samples and domains rather than treating each dataset independently.  
@@ -26,6 +27,7 @@
   - Inductive inference on unseen nodes  
 
 ---
+
 
 ## Dataset Source and Description
 
@@ -49,7 +51,8 @@
 
 ---
 
-## Dataset Construction and Preprocessing 9[(`build_dataset.ipynb`)](./organizer_scripts/build_dataset.ipynb)
+## Dataset Construction and Preprocessing [(`build_dataset.ipynb`)](./organizer_scripts/build_dataset.ipynb) and [Data clean on Kaggle](https://www.kaggle.com/code/freeeman/maternal-2014425c3f4)
+
 
 **Objective:** Ensure structural compatibility for graph construction and inductive learning by Hnadling Expression Data, Parsing and Cleaning Metedata, and Expression-Metadata Fusion  
 
@@ -79,6 +82,7 @@
 
 ## Advanced GNN Implementation [(`advanced_GNN_model.py`)](./starter_code/advanced_GNN_model.py)
 
+
 <div align="center">
     <img src="images/IMG2.png" width='650' /> 
 </div>
@@ -87,8 +91,6 @@
 <br
 
 **Objective:** Implement an **advanced inductive GNN** for cfRNA → placenta prediction, ensuring **generalizable node representations** and **inductive learning**.  
-
-
 
 
 **Key Components:**  
@@ -106,7 +108,7 @@ If you use this challenge or dataset in your research, please cite:
 
 ```bibtex
 @dataset{gnn_challenge_2026,
-  title={GNN Challenge: Preeclampsia Classification from Gene Expression},
+  title={GNN Challenge: cfRNA → Placenta Inductive GNN for Maternal-Fetal Health Prediction},
   author={Mubaraq Onipede},
   year={2026},
   url={https://github.com/Mubarraqqq/gnn-challenge}
@@ -127,3 +129,4 @@ See [LICENSE](LICENSE) file for details.
 **Last Updated**: January 7, 2026
 
 **Good luck! 🚀 We look forward to your submissions!**
+
