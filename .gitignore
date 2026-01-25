@@ -1,5 +1,5 @@
 venv/
 .DS_Store
 
-.data/test_labels.csv
+data/test_labels.csv
 
