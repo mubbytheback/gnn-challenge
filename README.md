@@ -8,7 +8,6 @@
 <br>
 <br>
 
-
 ### Scientific Focus
 - Inductive graph learning across **cfRNA** and **placental transcriptomics** to detect maternal-fetal health issues.  
 - Learn **transferable representations** that generalize to unseen samples and domains rather than treating each dataset independently.  
