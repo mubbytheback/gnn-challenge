@@ -7,7 +7,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
 from torch_geometric.loader import NeighborLoader
-
 from torch_geometric.data import HeteroData
 from torch_geometric.nn import SAGEConv, to_hetero
 
