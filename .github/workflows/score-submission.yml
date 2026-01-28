@@ -1,7 +1,7 @@
 name: Score Submission
 
 on:
-  pull_request:
+  pull_request_target:
     paths:
       - 'submissions/*.csv'
   workflow_dispatch:
@@ -14,7 +14,7 @@ jobs:
       contents: write
 
     steps:
-      - name: Checkout code
+      - name: Checkout code (base branch only)
         uses: actions/checkout@v3
 
       - name: Set up Python
@@ -38,20 +38,58 @@ jobs:
           mkdir -p data
           echo "$TEST_LABELS_CSV_B64" | base64 -d > data/test_labels.csv
 
-      - name: Find submission file
+      - name: Find submission file (from PR)
         id: find_submission
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            if (!pr) {
+              core.setFailed("No pull request context available.");
+              return;
+            }
+            const files = await github.paginate(
+              github.rest.pulls.listFiles,
+              {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: pr.number,
+                per_page: 100,
+              }
+            );
+            const submission = files
+              .map(f => f.filename)
+              .find(name => name.startsWith("submissions/") && name.endsWith(".csv"));
+            if (!submission) {
+              core.setFailed("No submission file found in PR.");
+              return;
+            }
+            core.setOutput("submission", submission);
+            core.setOutput("head_repo", pr.head.repo.full_name);
+            core.setOutput("head_sha", pr.head.sha);
+
+      - name: Download submission file (read-only)
+        id: download_submission
+        env:
+          SUBMISSION_PATH: ${{ steps.find_submission.outputs.submission }}
+          HEAD_REPO: ${{ steps.find_submission.outputs.head_repo }}
+          HEAD_SHA: ${{ steps.find_submission.outputs.head_sha }}
         run: |
-          SUBMISSION=$(git diff --name-only origin/main HEAD | grep "submissions/" | grep ".csv" | head -1)
-          if [ -z "$SUBMISSION" ]; then
-            echo "No submission file found"
+          if [ -z "$SUBMISSION_PATH" ] || [ -z "$HEAD_REPO" ] || [ -z "$HEAD_SHA" ]; then
+            echo "Missing PR submission metadata"
             exit 1
           fi
-          echo "submission=$SUBMISSION" >> $GITHUB_OUTPUT
+          case "$SUBMISSION_PATH" in
+            submissions/*.csv) ;;
+            *) echo "Invalid submission path: $SUBMISSION_PATH"; exit 1 ;;
+          esac
+          RAW_URL="https://raw.githubusercontent.com/${HEAD_REPO}/${HEAD_SHA}/${SUBMISSION_PATH}"
+          curl -fsSL "$RAW_URL" -o /tmp/pr_submission.csv
 
       - name: Run scoring script
         id: score
         run: |
-          python scoring_script.py "${{ steps.find_submission.outputs.submission }}"
+          python scoring_script.py /tmp/pr_submission.csv
         continue-on-error: true
 
       - name: Extract metrics and comment

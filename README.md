@@ -99,7 +99,7 @@
 - **Mini-Batch Training:** Use neighborhood sampling** for efficient training on large graphs.  
 - **Inductive Inference:** Generate predictions for unseen placenta nodes without label leakage.  
 
-
+---
 
 ## 📝 Citation
 
@@ -128,4 +128,3 @@ See [LICENSE](LICENSE) file for details.
 **Last Updated**: January 7, 2026
 
 **Good luck! 🚀 We look forward to your submissions!**
-

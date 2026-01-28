@@ -81,7 +81,7 @@ placenta_1,0,0.92,0.08
      - Any insights or findings
 
 5. **Wait for automated scoring**:
-   - GitHub Actions will automatically score your submission
+   - GitHub Actions will automatically score your submission (in CI against the hidden test set)
    - Results posted as comment on your PR
    - If approved, leaderboard will be updated
 

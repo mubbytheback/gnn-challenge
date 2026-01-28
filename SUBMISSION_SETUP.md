@@ -1,74 +1,10 @@
 # Submission & Leaderboard Setup
 
-This project supports two approaches for hosting submissions and managing a leaderboard on GitHub.
+**This project uses automated scoring only.** Submissions are evaluated in CI against a hidden test set and the leaderboard updates on merge.
 
-## 📋 Overview
+This project uses fully automated scoring and leaderboard updates via GitHub Actions.
 
-| Aspect | Manual Submission | Automated Scoring |
-|--------|------------------|-------------------|
-| **Setup Effort** | Low | Medium |
-| **User Experience** | Simple, flexible | Fast, transparent |
-| **Automation** | Manual updates | Fully automated |
-| **Best For** | Small competitions | Large-scale challenges |
-
----
-
-## Option 1: Manual Submission with Leaderboard.md
-
-### How It Works
-
-1. **Participants** submit predictions via Pull Request
-2. **Organizers** manually run scoring script
-3. **Leaderboard** updated manually in `leaderboard.md`
-
-### Files Used
-
-- **`leaderboard.md`** - Central leaderboard document
-- **`scoring_script.py`** - Manual scoring utility
-- **`submissions/`** - Submission storage directory
-
-### Workflow
-
-```
-Participant Submits PR
-    ↓
-Organizer Reviews PR
-    ↓
-Run: python scoring_script.py submissions/{file}.csv
-    ↓
-Organizer Updates leaderboard.md
-    ↓
-PR Merged + Leaderboard Updated
-```
-
-### Advantages ✅
-- Simple to set up
-- Full control over submissions
-- Can verify quality before adding to leaderboard
-- No CI/CD required
-
-### Disadvantages ❌
-- Requires manual effort
-- Slower feedback to participants
-- Error-prone leaderboard updates
-- Doesn't scale well
-
-### Commands
-
-```bash
-# Score a single submission
-python scoring_script.py submissions/my_model_submission.csv
-
-# Output example:
-# Submission F1 Score: 0.8421
-# Accuracy: 0.8387
-# Precision: 0.8571
-# Recall: 0.8276
-```
-
----
-
-## Option 2: Automated Scoring with GitHub Actions
+## Automated Scoring with GitHub Actions
 
 ### How It Works
 
@@ -109,7 +45,7 @@ Leaderboard Auto-Updated
 ### Advantages ✅
 - Fully automated
 - Fast feedback (2-5 minutes)
-- No manual errors
+- Consistent scoring
 - Transparent scoring
 - Professional appearance
 - Scales to many submissions
@@ -181,44 +117,13 @@ Then create a PR and watch GitHub Actions run!
 
 ## 📊 Leaderboard Features
 
-### Manual Mode (`leaderboard.md`)
-
-```markdown
-| Rank | Model | F1-Score | Accuracy | Date | By |
-|------|-------|----------|----------|------|-----|
-| 1 | Advanced GNN | 0.8421 | 0.8387 | 2026-01-07 | organizers |
-| 2 | Baseline MLP | 0.7845 | 0.7742 | 2026-01-07 | organizers |
-```
-
-### Automated Mode
-
 The `update_leaderboard.py` script:
 1. Reads all submission files in `submissions/`
-2. Scores each against `test_labels.csv`
+2. Scores each against the hidden test labels in CI
 3. Sorts by F1-Score (descending)
 4. Updates table in `leaderboard.md`
 5. Adds submission log entries
 6. Commits changes back to repo
-
----
-
-## 🎯 Recommendation: Use Both
-
-### Hybrid Approach
-
-1. **Use GitHub Actions** for:
-   - Automatic scoring and feedback
-   - Transparent ranking
-   - Reducing manual work
-
-2. **Use `leaderboard.md`** for:
-   - Final official rankings
-   - Detailed submission logs
-   - Challenge information
-
-This provides the best user experience while maintaining quality control.
-
----
 
 ## 📝 Example PR Comment (Automated)
 
@@ -287,7 +192,7 @@ result = {
 - [x] Create `CONTRIBUTING.md` with submission guide
 - [x] Create `submissions/README.md`
 - [x] Test scoring script works
-- [ ] Enable GitHub Actions (if using Option 2)
+- [ ] Enable GitHub Actions
 - [ ] Test workflow with sample submission
 - [ ] Update main `README.md` to link to submission guide
 - [ ] Document evaluation metrics
