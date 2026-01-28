@@ -67,6 +67,8 @@ jobs:
             core.setOutput("submission", submission);
             core.setOutput("head_repo", pr.head.repo.full_name);
             core.setOutput("head_sha", pr.head.sha);
+            core.setOutput("submitter", pr.user.login);
+            core.setOutput("pr_number", pr.number);
 
       - name: Download submission file (read-only)
         id: download_submission
@@ -98,7 +100,7 @@ jobs:
         with:
           script: |
             const fs = require('fs');
-            const submissionFile = "${{ steps.find_submission.outputs.submission }}";
+            const submissionFile = "/tmp/pr_submission.csv";
             const metrics = require('child_process').execSync(
               `python scoring_script.py ${submissionFile}`,
               { encoding: 'utf-8' }
@@ -111,16 +113,20 @@ jobs:
             });
 
       - name: Update leaderboard
-        if: github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged == true
+        if: github.event_name == 'pull_request_target' && github.event.action == 'closed' && github.event.pull_request.merged == true
+        env:
+          SUBMISSION_FILE: ${{ steps.find_submission.outputs.submission }}
+          SUBMITTER: ${{ steps.find_submission.outputs.submitter }}
+          PR_NUMBER: ${{ steps.find_submission.outputs.pr_number }}
         run: |
           python update_leaderboard.py
 
       - name: Commit leaderboard update
-        if: github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged == true
+        if: github.event_name == 'pull_request_target' && github.event.action == 'closed' && github.event.pull_request.merged == true
         run: |
           git config --global user.name "GitHub Actions"
           git config --global user.email "actions@github.com"
-          git add leaderboard.md
+          git add leaderboard.md submissions/submission_meta.csv
           git commit -m "Update leaderboard with new submission" || true
           git push
 

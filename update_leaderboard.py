@@ -17,6 +17,12 @@ from datetime import datetime
 SUBMISSIONS_DIR = "submissions"
 DATA_DIR = "data"
 LEADERBOARD_FILE = "leaderboard.md"
+META_FILE = os.path.join(SUBMISSIONS_DIR, "submission_meta.csv")
+
+# PR context (optional, from CI)
+ENV_SUBMISSION_FILE = os.getenv("SUBMISSION_FILE")
+ENV_SUBMITTER = os.getenv("SUBMITTER")
+ENV_PR_NUMBER = os.getenv("PR_NUMBER")
 
 # Load ground truth
 test_labels = pd.read_csv(os.path.join(DATA_DIR, "test_labels.csv"), index_col=0)
@@ -28,6 +34,26 @@ EXCLUDE_FILES = ["advanced_gnn_preds.csv", "baseline_mlp_preds.csv"]
 submission_files = [f for f in submission_files if f.name not in EXCLUDE_FILES]
 
 print(f"🔍 Found {len(submission_files)} new submission(s)")
+
+# Load or update submitter metadata
+meta_columns = ["file", "submitter", "pr_number", "date"]
+if os.path.exists(META_FILE):
+    meta_df = pd.read_csv(META_FILE)
+else:
+    meta_df = pd.DataFrame(columns=meta_columns)
+
+if ENV_SUBMISSION_FILE and ENV_SUBMITTER:
+    submission_name = os.path.basename(ENV_SUBMISSION_FILE)
+    now = datetime.now().strftime("%Y-%m-%d %H:%M")
+    new_row = {
+        "file": submission_name,
+        "submitter": ENV_SUBMITTER,
+        "pr_number": ENV_PR_NUMBER if ENV_PR_NUMBER else "",
+        "date": now,
+    }
+    meta_df = meta_df[meta_df["file"] != submission_name]
+    meta_df = pd.concat([meta_df, pd.DataFrame([new_row])], ignore_index=True)
+    meta_df.to_csv(META_FILE, index=False)
 
 # Score each submission
 results = []
@@ -130,8 +156,11 @@ header = """| Rank | Model | F1-Score | Accuracy | Precision | Recall | Submissi
 |------|-------|----------|----------|-----------|--------|-----------------|--------------|"""
 
 rows = []
+submitter_map = {row["file"]: row["submitter"] for _, row in meta_df.iterrows()} if not meta_df.empty else {}
+
 for r in all_results:
-    submitted_by = "organizers" if r["model_name"] in ["Advanced Gnn (Graphsage)", "Baseline Mlp"] else "participant"
+    default_submitter = "organizers" if r["file"] in EXCLUDE_FILES else "participant"
+    submitted_by = submitter_map.get(r["file"], default_submitter)
     row = f"| {r['rank']} | {r['model_name']} | {r['f1_score']:.4f} | {r['accuracy']:.4f} | {r['precision']:.4f} | {r['recall']:.4f} | {r['date']} | {submitted_by} |"
     rows.append(row)
 
