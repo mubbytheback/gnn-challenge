@@ -27,6 +27,17 @@ jobs:
           python -m pip install --upgrade pip
           pip install pandas scikit-learn torch torch-geometric
 
+      - name: Restore private test labels
+        env:
+          TEST_LABELS_CSV_B64: ${{ secrets.TEST_LABELS_CSV_B64 }}
+        run: |
+          if [ -z "$TEST_LABELS_CSV_B64" ]; then
+            echo "Missing TEST_LABELS_CSV_B64 secret"
+            exit 1
+          fi
+          mkdir -p data
+          echo "$TEST_LABELS_CSV_B64" | base64 -d > data/test_labels.csv
+
       - name: Find submission file
         id: find_submission
         run: |
@@ -74,3 +85,8 @@ jobs:
           git add leaderboard.md
           git commit -m "Update leaderboard with new submission" || true
           git push
+
+      - name: Cleanup private labels
+        if: always()
+        run: |
+          rm -f data/test_labels.csv
