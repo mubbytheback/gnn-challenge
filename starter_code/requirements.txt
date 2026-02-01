@@ -42,7 +42,8 @@ numpy
 scikit-learn
 torch
 torch-geometric
-pyg-libaiohappyeyeballs==2.6.1
+pyg-lib
+aiohappyeyeballs
 aiohttp==3.13.3
 aiosignal==1.4.0
 appnope==0.1.4
