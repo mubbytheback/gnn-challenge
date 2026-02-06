@@ -3,7 +3,7 @@ name: Score Submission
 on:
   pull_request_target:
     paths:
-      - 'submissions/*.csv'
+      - 'submissions/inbox/**'
   workflow_dispatch:
 
 jobs:
@@ -57,41 +57,66 @@ jobs:
                 per_page: 100,
               }
             );
-            const submission = files
+            const predictionFile = files
               .map(f => f.filename)
-              .find(name => name.startsWith("submissions/") && name.endsWith(".csv"));
-            if (!submission) {
-              core.setFailed("No submission file found in PR.");
+              .find(name => name.startsWith("submissions/inbox/") && name.endsWith("/predictions.csv"));
+            const metadataFile = files
+              .map(f => f.filename)
+              .find(name => name.startsWith("submissions/inbox/") && name.endsWith("/metadata.json"));
+
+            if (!predictionFile || !metadataFile) {
+              core.setFailed("Submission must include predictions.csv and metadata.json under submissions/inbox/<team>/<run_id>/");
               return;
             }
-            core.setOutput("submission", submission);
+
+            const parts = predictionFile.split("/");
+            if (parts.length < 5) {
+              core.setFailed("Invalid submission path. Expected submissions/inbox/<team>/<run_id>/predictions.csv");
+              return;
+            }
+
+            core.setOutput("prediction", predictionFile);
+            core.setOutput("metadata", metadataFile);
             core.setOutput("head_repo", pr.head.repo.full_name);
             core.setOutput("head_sha", pr.head.sha);
             core.setOutput("submitter", pr.user.login);
             core.setOutput("pr_number", pr.number);
+            core.setOutput("team", parts[2]);
+            core.setOutput("run_id", parts[3]);
 
-      - name: Download submission file (read-only)
+      - name: Download submission files (read-only)
         id: download_submission
         env:
-          SUBMISSION_PATH: ${{ steps.find_submission.outputs.submission }}
+          PRED_PATH: ${{ steps.find_submission.outputs.prediction }}
+          META_PATH: ${{ steps.find_submission.outputs.metadata }}
           HEAD_REPO: ${{ steps.find_submission.outputs.head_repo }}
           HEAD_SHA: ${{ steps.find_submission.outputs.head_sha }}
         run: |
-          if [ -z "$SUBMISSION_PATH" ] || [ -z "$HEAD_REPO" ] || [ -z "$HEAD_SHA" ]; then
+          if [ -z "$PRED_PATH" ] || [ -z "$META_PATH" ] || [ -z "$HEAD_REPO" ] || [ -z "$HEAD_SHA" ]; then
             echo "Missing PR submission metadata"
             exit 1
           fi
-          case "$SUBMISSION_PATH" in
-            submissions/*.csv) ;;
-            *) echo "Invalid submission path: $SUBMISSION_PATH"; exit 1 ;;
+          case "$PRED_PATH" in
+            submissions/inbox/*/*/predictions.csv) ;;
+            *) echo "Invalid submission path: $PRED_PATH"; exit 1 ;;
           esac
-          RAW_URL="https://raw.githubusercontent.com/${HEAD_REPO}/${HEAD_SHA}/${SUBMISSION_PATH}"
-          curl -fsSL "$RAW_URL" -o /tmp/pr_submission.csv
+          case "$META_PATH" in
+            submissions/inbox/*/*/metadata.json) ;;
+            *) echo "Invalid metadata path: $META_PATH"; exit 1 ;;
+          esac
+          PRED_URL="https://raw.githubusercontent.com/${HEAD_REPO}/${HEAD_SHA}/${PRED_PATH}"
+          META_URL="https://raw.githubusercontent.com/${HEAD_REPO}/${HEAD_SHA}/${META_PATH}"
+          curl -fsSL "$PRED_URL" -o /tmp/pr_predictions.csv
+          curl -fsSL "$META_URL" -o /tmp/pr_metadata.json
+
+      - name: Validate submission format
+        run: |
+          python competition/validate_submission.py /tmp/pr_predictions.csv
 
       - name: Run scoring script
         id: score
         run: |
-          python scoring_script.py /tmp/pr_submission.csv
+          python scoring_script.py /tmp/pr_predictions.csv
         continue-on-error: true
 
       - name: Extract metrics and comment
@@ -100,7 +125,7 @@ jobs:
         with:
           script: |
             const fs = require('fs');
-            const submissionFile = "/tmp/pr_submission.csv";
+            const submissionFile = "/tmp/pr_predictions.csv";
             const metrics = require('child_process').execSync(
               `python scoring_script.py ${submissionFile}`,
               { encoding: 'utf-8' }
@@ -115,10 +140,27 @@ jobs:
       - name: Update leaderboard
         if: github.event_name == 'pull_request_target' && github.event.action == 'closed' && github.event.pull_request.merged == true
         env:
-          SUBMISSION_FILE: ${{ steps.find_submission.outputs.submission }}
           SUBMITTER: ${{ steps.find_submission.outputs.submitter }}
           PR_NUMBER: ${{ steps.find_submission.outputs.pr_number }}
+          TEAM: ${{ steps.find_submission.outputs.team }}
+          RUN_ID: ${{ steps.find_submission.outputs.run_id }}
         run: |
+          mkdir -p "submissions/inbox/${TEAM}/${RUN_ID}"
+          cp /tmp/pr_predictions.csv "submissions/inbox/${TEAM}/${RUN_ID}/predictions.csv"
+          # Merge submitter info into metadata.json
+          python - <<'PY'
+          import json
+          meta_path = "submissions/inbox/${TEAM}/${RUN_ID}/metadata.json"
+          try:
+              with open("/tmp/pr_metadata.json", "r", encoding="utf-8") as f:
+                  meta = json.load(f)
+          except Exception:
+              meta = {}
+          meta["submitter"] = "${SUBMITTER}"
+          meta["pr_number"] = "${PR_NUMBER}"
+          with open(meta_path, "w", encoding="utf-8") as f:
+              json.dump(meta, f, indent=2)
+          PY
           python update_leaderboard.py
 
       - name: Commit leaderboard update
@@ -126,7 +168,7 @@ jobs:
         run: |
           git config --global user.name "GitHub Actions"
           git config --global user.email "actions@github.com"
-          git add leaderboard.md submissions/submission_meta.csv
+          git add leaderboard/leaderboard.csv docs/leaderboard.csv leaderboard.md submissions/inbox
           git commit -m "Update leaderboard with new submission" || true
           git push
 

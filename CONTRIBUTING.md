@@ -28,31 +28,27 @@ X_test = test_df.drop(columns=['node_id', 'sample_id'])
 # Generate predictions
 predictions = model.predict(X_test)
 
-# Create submission file
+# Create submission file (probabilities or hard labels)
 submission = pd.DataFrame({
-    'node_id': test_df['node_id'],
-    'target': predictions
+    'id': test_df['node_id'],
+    'y_pred': predictions  # probability in [0,1] or hard 0/1
 })
 
-submission.to_csv('submissions/your_model_submission.csv', index=False)
+submission.to_csv('predictions.csv', index=False)
 ```
 
 ### 2. Required Format
 
 Your submission CSV must have:
-- **Columns**: `node_id`, `target`
+- **Columns**: `id`, `y_pred`
 - **Rows**: One row per test sample (123-124 rows)
-- **Values**: `target` should be 0 (control) or 1 (preeclampsia)
-
-**Optional columns**:
-- `confidence_control`: Probability/confidence for class 0
-- `confidence_preeclampsia`: Probability/confidence for class 1
+- **Values**: `y_pred` can be a probability (0–1) or a hard label (0/1)
 
 Example:
 ```csv
-node_id,target,confidence_control,confidence_preeclampsia
-placenta_0,1,0.15,0.85
-placenta_1,0,0.92,0.08
+id,y_pred
+placenta_0,0.85
+placenta_1,0.08
 ...
 ```
 
@@ -64,15 +60,31 @@ placenta_1,0,0.92,0.08
    git checkout -b submission/my-model-name
    ```
 
-3. **Add your submission file** to `submissions/` folder:
+3. **Create submission folder** and add files:
+   ```
+   submissions/inbox/<team>/<run_id>/predictions.csv
+   submissions/inbox/<team>/<run_id>/metadata.json
+   ```
+
+   Example metadata.json:
+   ```json
+   {
+     "team": "my_team",
+     "run_id": "run_001",
+     "model_name": "My GNN v1",
+     "model_type": "human"
+   }
+   ```
+
+4. **Add the files**:
    ```bash
-   cp submissions/your_model_submission.csv submissions/
-   git add submissions/your_model_submission.csv
-   git commit -m "Add submission: Your Model Name"
+   git add submissions/inbox/<team>/<run_id>/predictions.csv
+   git add submissions/inbox/<team>/<run_id>/metadata.json
+   git commit -m "Add submission: My Model Name"
    git push origin submission/my-model-name
    ```
 
-4. **Create a Pull Request** with details:
+5. **Create a Pull Request** with details:
    - **Title**: `[SUBMISSION] Your Model Name`
    - **Description**: Include:
      - Model architecture/approach
@@ -80,7 +92,7 @@ placenta_1,0,0.92,0.08
      - Key hyperparameters
      - Any insights or findings
 
-5. **Wait for automated scoring**:
+6. **Wait for automated scoring**:
    - GitHub Actions will automatically score your submission (in CI against the hidden test set)
    - Results posted as comment on your PR
    - If approved, leaderboard will be updated

@@ -210,9 +210,9 @@ train_loader = NeighborLoader(
 print("Starting neighborhood mini-batch training...")
 best_val_loss = float("inf")
 best_state = None
-patience = 100
+patience = 500
 patience_left = patience
-for epoch in range(1, 2001):
+for epoch in range(1, 4001):
     model.train()
     total_loss = 0
     for batch in train_loader:

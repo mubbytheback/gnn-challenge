@@ -89,26 +89,32 @@ def test_submission_format():
     # Create sample submission
     try:
         submission = pd.DataFrame({
-            'node_id': test_df['node_id'],
-            'target': [0 if i % 2 == 0 else 1 for i in range(len(test_df))],
-            'confidence_control': [0.5 + 0.1*i for i in range(len(test_df))],
-            'confidence_preeclampsia': [0.5 - 0.1*i for i in range(len(test_df))]
+            'id': test_df['node_id'],
+            'y_pred': [0.5 for _ in range(len(test_df))]
         })
-        
+
         # Save to temp file
-        temp_file = 'submissions/test_submission_validation.csv'
+        temp_dir = Path('submissions/inbox/test_team/test_run')
+        temp_dir.mkdir(parents=True, exist_ok=True)
+        temp_file = temp_dir / 'predictions.csv'
         submission.to_csv(temp_file, index=False)
         print_status("pass", f"Created valid submission CSV ({len(submission)} rows)")
+
+        meta_file = temp_dir / 'metadata.json'
+        meta_file.write_text('{\n  \"team\": \"test_team\",\n  \"run_id\": \"test_run\",\n  \"model_name\": \"Test Model\",\n  \"model_type\": \"human\"\n}\n')
+        print_status("pass", "Created metadata.json")
         
         # Verify format
         reloaded = pd.read_csv(temp_file)
-        assert 'node_id' in reloaded.columns, "Missing 'node_id' column"
-        assert 'target' in reloaded.columns, "Missing 'target' column"
+        assert 'id' in reloaded.columns, "Missing 'id' column"
+        assert 'y_pred' in reloaded.columns, "Missing 'y_pred' column"
         assert len(reloaded) == len(test_df), "Row count mismatch"
         print_status("pass", "Submission format validation passed")
         
         # Clean up
         os.remove(temp_file)
+        os.remove(meta_file)
+        temp_dir.rmdir()
         return True
         
     except Exception as e:

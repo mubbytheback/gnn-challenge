@@ -139,9 +139,14 @@ def evaluate_submission(submission_path, ground_truth_path=None):
     """
     # Load submission
     submission = pd.read_csv(submission_path)
-    
-    if 'target' not in submission.columns or 'node_id' not in submission.columns:
-        print("❌ Submission must have 'node_id' and 'target' columns")
+
+    # Normalize expected columns
+    if "id" in submission.columns and "y_pred" in submission.columns:
+        submission = submission.rename(columns={"id": "node_id", "y_pred": "target"})
+    elif "node_id" in submission.columns and "target" in submission.columns:
+        pass
+    else:
+        print("❌ Submission must have either ['id','y_pred'] or ['node_id','target'] columns")
         return None
     
     # Check if ground truth available
@@ -162,7 +167,13 @@ def evaluate_submission(submission_path, ground_truth_path=None):
         return None
     
     y_true = merged['target_true'].values
-    y_pred = merged['target_pred'].values
+    y_pred_raw = merged['target_pred'].values
+
+    # If probabilities, threshold at 0.5
+    if y_pred_raw.dtype.kind in {"f", "c"}:
+        y_pred = (y_pred_raw >= 0.5).astype(int)
+    else:
+        y_pred = y_pred_raw.astype(int)
     
     # Evaluate
     metrics = score_predictions(y_true, y_pred)
@@ -177,7 +188,7 @@ if __name__ == "__main__":
     print("="*60)
     
     # Example usage
-    submission_file = "submissions/advanced_gnn_preds.csv"
+    submission_file = "submissions/inbox/example_team/example_run/predictions.csv"
     ground_truth_file = "data/test_labels.csv"  # True labels for test set
     
     if len(sys.argv) > 1:
@@ -194,5 +205,4 @@ if __name__ == "__main__":
         print(f"❌ Submission file not found: {submission_file}")
         print(f"\nUsage: python scoring_script.py <submission_file.csv> [ground_truth_file.csv]")
         print(f"\nExample:")
-        print(f"  python scoring_script.py submissions/advanced_gnn_preds.csv")
-        print(f"  python scoring_script.py submissions/baseline_preds.csv")
+        print(f"  python scoring_script.py submissions/inbox/my_team/run_001/predictions.csv")

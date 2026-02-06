@@ -2,199 +2,192 @@
 """
 update_leaderboard.py
 
-Automatically update leaderboard.md by scoring all submission files.
-Runs after successful submission PR merge.
+Scores new submissions and updates leaderboard/leaderboard.csv (source of truth)
+and regenerates leaderboard.md + docs/leaderboard.csv for GitHub Pages.
 """
 
 import os
-import re
-import pandas as pd
+import csv
+import json
 from pathlib import Path
-from sklearn.metrics import f1_score, accuracy_score, precision_score, recall_score, confusion_matrix
 from datetime import datetime
 
-# Paths
-SUBMISSIONS_DIR = "submissions"
-DATA_DIR = "data"
-LEADERBOARD_FILE = "leaderboard.md"
-META_FILE = os.path.join(SUBMISSIONS_DIR, "submission_meta.csv")
+import pandas as pd
+from sklearn.metrics import f1_score, accuracy_score, precision_score, recall_score, confusion_matrix
 
-# PR context (optional, from CI)
-ENV_SUBMISSION_FILE = os.getenv("SUBMISSION_FILE")
-ENV_SUBMITTER = os.getenv("SUBMITTER")
-ENV_PR_NUMBER = os.getenv("PR_NUMBER")
+# Paths
+SUBMISSIONS_DIR = Path("submissions/inbox")
+DATA_DIR = Path("data")
+LEADERBOARD_CSV = Path("leaderboard/leaderboard.csv")
+LEADERBOARD_MD = Path("leaderboard.md")
+DOCS_LEADERBOARD_CSV = Path("docs/leaderboard.csv")
 
 # Load ground truth
-test_labels = pd.read_csv(os.path.join(DATA_DIR, "test_labels.csv"), index_col=0)
+TEST_LABELS = DATA_DIR / "test_labels.csv"
+if not TEST_LABELS.exists():
+    raise FileNotFoundError("data/test_labels.csv not found. Hidden labels are required for scoring.")
+
+test_labels = pd.read_csv(TEST_LABELS, index_col=0)
+if test_labels.shape[1] == 0:
+    raise ValueError("test_labels.csv must have at least one column with labels.")
+
 test_true = test_labels.iloc[:, 0].values.astype(int)
 
-# Find all submission files (excluding the organizing committee's files)
-submission_files = list(Path(SUBMISSIONS_DIR).glob("*_preds.csv"))
-EXCLUDE_FILES = ["advanced_gnn_preds.csv", "baseline_mlp_preds.csv"]
-submission_files = [f for f in submission_files if f.name not in EXCLUDE_FILES]
+# Ensure leaderboard CSV exists
+LEADERBOARD_CSV.parent.mkdir(parents=True, exist_ok=True)
+if not LEADERBOARD_CSV.exists():
+    with open(LEADERBOARD_CSV, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow([
+            "rank",
+            "team",
+            "run_id",
+            "model",
+            "model_type",
+            "f1_score",
+            "accuracy",
+            "precision",
+            "recall",
+            "submission_date",
+            "submitter",
+            "pr_number",
+            "submission_path",
+        ])
 
-print(f"🔍 Found {len(submission_files)} new submission(s)")
+leaderboard_df = pd.read_csv(LEADERBOARD_CSV)
 
-# Load or update submitter metadata
-meta_columns = ["file", "submitter", "pr_number", "date"]
-if os.path.exists(META_FILE):
-    meta_df = pd.read_csv(META_FILE)
-else:
-    meta_df = pd.DataFrame(columns=meta_columns)
+# Track existing submissions to avoid duplicates
+existing_keys = set()
+if not leaderboard_df.empty:
+    for _, row in leaderboard_df.iterrows():
+        existing_keys.add((str(row.get("team", "")), str(row.get("run_id", ""))))
 
-if ENV_SUBMISSION_FILE and ENV_SUBMITTER:
-    submission_name = os.path.basename(ENV_SUBMISSION_FILE)
-    now = datetime.now().strftime("%Y-%m-%d %H:%M")
-    new_row = {
-        "file": submission_name,
-        "submitter": ENV_SUBMITTER,
-        "pr_number": ENV_PR_NUMBER if ENV_PR_NUMBER else "",
-        "date": now,
-    }
-    meta_df = meta_df[meta_df["file"] != submission_name]
-    meta_df = pd.concat([meta_df, pd.DataFrame([new_row])], ignore_index=True)
-    meta_df.to_csv(META_FILE, index=False)
+# Find submissions
+submission_files = list(SUBMISSIONS_DIR.glob("*/*/predictions.csv"))
+print(f"🔍 Found {len(submission_files)} submission file(s) in submissions/inbox")
 
-# Score each submission
-results = []
+new_rows = []
 
-for sub_file in submission_files:
-    print(f"\n📊 Scoring {sub_file.name}...")
-    
+for pred_path in submission_files:
+    team = pred_path.parent.parent.name
+    run_id = pred_path.parent.name
+    key = (team, run_id)
+
+    if key in existing_keys:
+        continue
+
+    meta_path = pred_path.parent / "metadata.json"
+    if not meta_path.exists():
+        print(f"⚠️ Missing metadata.json for {pred_path}. Skipping.")
+        continue
+
     try:
-        submission = pd.read_csv(sub_file)
-        
-        if "target" not in submission.columns or len(submission) != len(test_true):
-            print(f"   ⚠️ Invalid format or length mismatch. Skipping.")
-            continue
-        
-        preds = submission["target"].values.astype(int)
-        
-        # Compute metrics
-        f1 = f1_score(test_true, preds, average="macro", zero_division=0)
-        acc = accuracy_score(test_true, preds)
-        prec = precision_score(test_true, preds, zero_division=0)
-        rec = recall_score(test_true, preds, zero_division=0)
-        cm = confusion_matrix(test_true, preds)
-        
-        # Extract model name from filename
-        model_name = sub_file.stem.replace("_preds", "").replace("_", " ").title()
-        
-        result = {
-            "model_name": model_name,
-            "file": sub_file.name,
-            "f1_score": f1,
-            "accuracy": acc,
-            "precision": prec,
-            "recall": rec,
-            "tn": cm[0, 0],
-            "fp": cm[0, 1],
-            "fn": cm[1, 0],
-            "tp": cm[1, 1],
-            "date": datetime.now().strftime("%Y-%m-%d %H:%M")
-        }
-        
-        results.append(result)
-        print(f"   ✅ F1={f1:.4f}, Acc={acc:.4f}, Prec={prec:.4f}, Rec={rec:.4f}")
-        
+        submission = pd.read_csv(pred_path)
     except Exception as e:
-        print(f"   ❌ Error scoring {sub_file.name}: {e}")
+        print(f"❌ Failed to read {pred_path}: {e}")
+        continue
 
-if not results:
-    print("\n⚠️ No new valid submissions to add.")
+    # Validate format: id, y_pred
+    if "id" not in submission.columns or "y_pred" not in submission.columns:
+        print(f"⚠️ Invalid format in {pred_path}. Required columns: id, y_pred")
+        continue
+
+    # Align predictions with test labels using id
+    submission = submission.rename(columns={"id": "node_id"})
+    if submission["y_pred"].dtype.kind in {"f", "c"}:
+        proba = submission["y_pred"].astype(float).values
+        preds = (proba >= 0.5).astype(int)
+    else:
+        preds = submission["y_pred"].astype(int).values
+
+    if len(preds) != len(test_true):
+        print(f"⚠️ Length mismatch in {pred_path}. Expected {len(test_true)}, got {len(preds)}")
+        continue
+
+    # Compute metrics
+    f1 = f1_score(test_true, preds, average="macro", zero_division=0)
+    acc = accuracy_score(test_true, preds)
+    prec = precision_score(test_true, preds, zero_division=0)
+    rec = recall_score(test_true, preds, zero_division=0)
+    _ = confusion_matrix(test_true, preds)
+
+    # Metadata
+    try:
+        with open(meta_path, "r", encoding="utf-8") as f:
+            meta = json.load(f)
+    except Exception:
+        meta = {}
+
+    model_name = meta.get("model_name", f"{team}-{run_id}")
+    model_type = meta.get("model_type", "unknown")
+
+    new_rows.append({
+        "rank": 0,
+        "team": team,
+        "run_id": run_id,
+        "model": model_name,
+        "model_type": model_type,
+        "f1_score": f1,
+        "accuracy": acc,
+        "precision": prec,
+        "recall": rec,
+        "submission_date": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "submitter": meta.get("submitter", "participant"),
+        "pr_number": meta.get("pr_number", ""),
+        "submission_path": str(pred_path),
+    })
+
+if not new_rows:
+    print("⚠️ No new valid submissions to add.")
     exit(0)
 
-# Read current leaderboard
-with open(LEADERBOARD_FILE, "r") as f:
-    content = f.read()
+# Append and re-rank
+updated_df = pd.concat([leaderboard_df, pd.DataFrame(new_rows)], ignore_index=True)
+updated_df = updated_df.sort_values(by=["f1_score", "accuracy"], ascending=False, ignore_index=True)
+updated_df["rank"] = range(1, len(updated_df) + 1)
 
-# Extract current table rows (between the header row and next section)
-table_pattern = r'(\| 1 \|.*?\n)(.*?)(\n##)'
-match = re.search(table_pattern, content, re.DOTALL)
+# Write CSV (source of truth)
+updated_df.to_csv(LEADERBOARD_CSV, index=False)
 
-current_rows = []
-if match:
-    current_rows_text = match.group(2)
-    for line in current_rows_text.strip().split("\n"):
-        if line.startswith("|") and "---" not in line:
-            # Parse existing row
-            parts = [p.strip() for p in line.split("|")[1:-1]]
-            if len(parts) >= 7:
-                current_rows.append({
-                    "rank": int(parts[0]),
-                    "model_name": parts[1],
-                    "f1_score": float(parts[2]),
-                    "accuracy": float(parts[3]),
-                    "precision": float(parts[4]),
-                    "recall": float(parts[5]),
-                    "date": parts[6]
-                })
+# Copy CSV to docs for GitHub Pages
+DOCS_LEADERBOARD_CSV.parent.mkdir(parents=True, exist_ok=True)
+updated_df.to_csv(DOCS_LEADERBOARD_CSV, index=False)
 
-# Combine and sort
-all_results = current_rows + [
-    {
-        "rank": 0,  # Will be reassigned
-        "model_name": r["model_name"],
-        "f1_score": r["f1_score"],
-        "accuracy": r["accuracy"],
-        "precision": r["precision"],
-        "recall": r["recall"],
-        "date": r["date"]
-    }
-    for r in results
+# Render markdown leaderboard
+md_lines = [
+    "# 🏆 GNN Challenge Leaderboard",
+    "",
+    "## Current Leaderboard",
+    "",
+    "| Rank | Team | Run | Model | Type | F1-Score | Accuracy | Precision | Recall | Date | Submitter |",
+    "|------|------|-----|-------|------|----------|----------|-----------|--------|------|-----------|",
 ]
 
-# Sort by F1 score (descending)
-all_results.sort(key=lambda x: x["f1_score"], reverse=True)
+for _, row in updated_df.iterrows():
+    md_lines.append(
+        "| {rank} | {team} | {run_id} | {model} | {model_type} | {f1_score:.4f} | {accuracy:.4f} | {precision:.4f} | {recall:.4f} | {submission_date} | {submitter} |".format(
+            rank=int(row["rank"]),
+            team=row["team"],
+            run_id=row["run_id"],
+            model=row["model"],
+            model_type=row["model_type"],
+            f1_score=row["f1_score"],
+            accuracy=row["accuracy"],
+            precision=row["precision"],
+            recall=row["recall"],
+            submission_date=row["submission_date"],
+            submitter=row["submitter"],
+        )
+    )
 
-# Reassign ranks
-for i, result in enumerate(all_results, 1):
-    result["rank"] = i
-
-# Build new table
-header = """| Rank | Model | F1-Score | Accuracy | Precision | Recall | Submission Date | Submitted By |
-|------|-------|----------|----------|-----------|--------|-----------------|--------------|"""
-
-rows = []
-submitter_map = {row["file"]: row["submitter"] for _, row in meta_df.iterrows()} if not meta_df.empty else {}
-
-for r in all_results:
-    default_submitter = "organizers" if r["file"] in EXCLUDE_FILES else "participant"
-    submitted_by = submitter_map.get(r["file"], default_submitter)
-    row = f"| {r['rank']} | {r['model_name']} | {r['f1_score']:.4f} | {r['accuracy']:.4f} | {r['precision']:.4f} | {r['recall']:.4f} | {r['date']} | {submitted_by} |"
-    rows.append(row)
-
-table = header + "\n" + "\n".join(rows)
-
-# Replace table in leaderboard
-new_content = re.sub(
-    r'(\| Rank \| Model.*?\n\|.*?\n)(.*?)(\n## Submissions Log)',
-    r'\1' + "\n".join(rows) + r'\3',
-    content,
-    flags=re.DOTALL
-)
-
-# Add submission logs for new results
-submissions_log = "\n\n### " + "\n\n### ".join([
-    f"{r['model_name']}\n"
-    f"- **F1-Score**: {r['f1_score']:.4f}\n"
-    f"- **Accuracy**: {r['accuracy']:.4f}\n"
-    f"- **Precision**: {r['precision']:.4f}\n"
-    f"- **Recall**: {r['recall']:.4f}\n"
-    f"- **Confusion Matrix**: TN={r['tn']}, FP={r['fp']}, FN={r['fn']}, TP={r['tp']}\n"
-    f"- **Submission**: `{r['file']}`\n"
-    f"- **Date**: {r['date']}"
-    for r in results
+md_lines.extend([
+    "",
+    "## Notes",
+    "- This leaderboard is auto-generated from `leaderboard/leaderboard.csv`.",
+    "- Submissions must follow the `submissions/inbox/<team>/<run_id>/predictions.csv` format.",
 ])
 
-new_content = new_content.replace(
-    "## Submissions Log",
-    f"## Submissions Log\n{submissions_log}\n\n## Previous Submissions"
-)
+LEADERBOARD_MD.write_text("\n".join(md_lines), encoding="utf-8")
 
-# Write updated leaderboard
-with open(LEADERBOARD_FILE, "w") as f:
-    f.write(new_content)
-
-print(f"\n✅ Leaderboard updated with {len(results)} new submission(s)")
-print(f"   Top model: {all_results[0]['model_name']} (F1={all_results[0]['f1_score']:.4f})")
+print(f"✅ Leaderboard updated with {len(new_rows)} new submission(s)")
+print(f"   Top model: {updated_df.iloc[0]['model']} (F1={updated_df.iloc[0]['f1_score']:.4f})")
