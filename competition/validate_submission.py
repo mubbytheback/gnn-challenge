@@ -16,7 +16,9 @@ def main():
         return 1
 
     pred_path = Path(sys.argv[1])
-    test_path = Path(sys.argv[2]) if len(sys.argv) > 2 else Path("data/test.csv")
+    default_test_nodes = Path("data/public/test_nodes.csv")
+    default_test = Path("data/test.csv")
+    test_path = Path(sys.argv[2]) if len(sys.argv) > 2 else (default_test_nodes if default_test_nodes.exists() else default_test)
 
     if not pred_path.exists():
         print(f"❌ Submission file not found: {pred_path}")
@@ -36,7 +38,13 @@ def main():
         print(f"❌ Row count mismatch. Expected {len(test_df)}, got {len(preds)}")
         return 1
 
-    test_ids = test_df["node_id"].astype(str).tolist()
+    if "id" in test_df.columns:
+        test_ids = test_df["id"].astype(str).tolist()
+    elif "node_id" in test_df.columns:
+        test_ids = test_df["node_id"].astype(str).tolist()
+    else:
+        print("❌ Test file must contain either 'id' or 'node_id' column")
+        return 1
     pred_ids = preds["id"].astype(str).tolist()
 
     if set(pred_ids) != set(test_ids):

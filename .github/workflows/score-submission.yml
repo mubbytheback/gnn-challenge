@@ -162,6 +162,7 @@ jobs:
               json.dump(meta, f, indent=2)
           PY
           python update_leaderboard.py
+          python competition/render_leaderboard.py
 
       - name: Commit leaderboard update
         if: github.event_name == 'pull_request_target' && github.event.action == 'closed' && github.event.pull_request.merged == true

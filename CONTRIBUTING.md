@@ -43,6 +43,7 @@ Your submission CSV must have:
 - **Columns**: `id`, `y_pred`
 - **Rows**: One row per test sample (123-124 rows)
 - **Values**: `y_pred` can be a probability (0–1) or a hard label (0/1)
+- **IDs**: Must exactly match `data/public/test_nodes.csv`
 
 Example:
 ```csv

@@ -101,6 +101,16 @@
 
 ---
 
+## Submission Format (Automated)
+
+Submissions must include:
+- `submissions/inbox/<team>/<run_id>/predictions.csv` with columns `id`, `y_pred`
+- `submissions/inbox/<team>/<run_id>/metadata.json`
+
+Public test IDs are available in `data/public/test_nodes.csv`.
+
+Interactive leaderboard: `docs/leaderboard.html` (GitHub Pages).
+
 ## 📝 Citation
 
 If you use this challenge or dataset in your research, please cite:
