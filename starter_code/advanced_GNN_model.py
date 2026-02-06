@@ -119,6 +119,8 @@ y = -1 * np.ones(NUM_NODES, dtype=int)  # default for all nodes
 y[train_idx] = train_df[target_col].values.astype(int)
 y = torch.tensor(y, dtype=torch.long)
 print(f"✅ Labels assigned. Train nodes: {len(train_idx)}, Total nodes: {NUM_NODES}")
+train_graph["node"].y = y
+test_graph["node"].y = y
 
 # -----------------------------
 # 6. GraphSAGE model
@@ -191,7 +193,7 @@ train_loader = NeighborLoader(
 )
 
 print("Starting neighborhood mini-batch training...")
-for epoch in range(1, 31):
+for epoch in range(1, 51):
     model.train()
     total_loss = 0
     for batch in train_loader:
@@ -203,7 +205,7 @@ for epoch in range(1, 31):
         
         # Root nodes are the batch nodes we compute loss on
         root_nodes = torch.arange(batch.batch_size_dict["node"], device=device)
-        batch_labels = batch.y[root_nodes]
+        batch_labels = batch["node"].y[root_nodes]
 
         loss = criterion(out[root_nodes], batch_labels)
         loss.backward()
