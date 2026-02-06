@@ -6,6 +6,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
+from sklearn.model_selection import train_test_split
 from torch_geometric.loader import NeighborLoader
 from torch_geometric.data import HeteroData
 from torch_geometric.nn import SAGEConv, to_hetero
@@ -18,7 +19,8 @@ DATA = os.path.join(ROOT, "../data")
 
 train_df = pd.read_csv(os.path.join(DATA, "train.csv"))   # cfRNA
 test_df  = pd.read_csv(os.path.join(DATA, "test.csv"))    # placenta
-test_labels = pd.read_csv(os.path.join(DATA, "test_labels.csv"), index_col=0)  # True labels for test set
+test_labels_path = os.path.join(DATA, "test_labels.csv")
+test_labels = pd.read_csv(test_labels_path, index_col=0) if os.path.exists(test_labels_path) else None
 edges_df = pd.read_csv(os.path.join(DATA, "graph_edges.csv"))
 node_df  = pd.read_csv(os.path.join(DATA, "node_types.csv"))
 
@@ -35,7 +37,7 @@ if missing_targets > 0:
 
 # Identify target column (train uses 'disease_labels' or 'target')
 target_col = 'disease_labels' if 'disease_labels' in train_df.columns else 'target'
-has_test_labels = target_col in test_df.columns
+has_test_labels = test_labels is not None
 # ========================================
 # Display Target Distribution
 # ========================================
@@ -51,17 +53,15 @@ for target_val, count in train_counts.items():
     label = "control" if target_val == 0 else "preeclampsia"
     print(f"   Class {target_val} ({label}): {count} samples ({pct:.1f}%)")
 
+print("\n🔹 TESTING DATA (Placenta):")
+print(f"   Total samples: {len(test_df)}")
 if has_test_labels:
-    print("\n🔹 TESTING DATA (Placenta):")
-    test_counts = test_df[target_col].value_counts().sort_index()
-    print(f"   Total samples: {len(test_df)}")
+    test_counts = pd.Series(test_labels.iloc[:, 0]).value_counts().sort_index()
     for target_val, count in test_counts.items():
         pct = (count / len(test_df)) * 100
         label = "control" if target_val == 0 else "preeclampsia"
         print(f"   Class {target_val} ({label}): {count} samples ({pct:.1f}%)")
 else:
-    print("\n🔹 TESTING DATA (Placenta):")
-    print(f"   Total samples: {len(test_df)}")
     print("   ⚠️  No labels (inductive task - labels hidden for evaluation)")
 
 print("="*70 + "\n")
@@ -88,8 +88,9 @@ def build_graph(allowed_edge_types):
 
     return data
 
+USE_ANCESTRY_IN_TEST = False
 train_graph = build_graph(["similarity"])
-test_graph  = build_graph(["similarity", "ancestry"])
+test_graph  = build_graph(["similarity", "ancestry"] if USE_ANCESTRY_IN_TEST else ["similarity"])
 
 # -----------------------------
 # 4. Node features
@@ -123,6 +124,20 @@ train_graph["node"].y = y
 test_graph["node"].y = y
 
 # -----------------------------
+# 5b. Train/validation split
+# -----------------------------
+train_labels = train_df[target_col].values.astype(int)
+train_idx_np = train_idx.cpu().numpy()
+train_idx_split, val_idx_split = train_test_split(
+    train_idx_np,
+    test_size=0.2,
+    random_state=42,
+    stratify=train_labels
+)
+train_idx_split = torch.tensor(train_idx_split, dtype=torch.long)
+val_idx_split = torch.tensor(val_idx_split, dtype=torch.long)
+
+# -----------------------------
 # 6. GraphSAGE model
 # -----------------------------
 class SAGEBlock(nn.Module):
@@ -148,7 +163,7 @@ class GNN(nn.Module):
         return self.cls(x, edge_index)
 
 num_classes = len(train_df[target_col].unique())
-base_model = GNN(X.size(1), hid_c=256, out_c=num_classes)
+base_model = GNN(X.size(1), hid_c=64, out_c=num_classes)
 model = to_hetero(base_model, train_graph.metadata(), aggr="mean")
 
 
@@ -175,25 +190,29 @@ criterion = nn.CrossEntropyLoss(weight=weights)
 print(f"Using class weights: {weights.cpu().numpy()}")
 
 
-optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+optimizer = torch.optim.Adam(model.parameters(), lr=1e-3, weight_decay=1e-4)
 
 
 # -----------------------------
 # 8. Training (Neighborhood Mini-Batch)
 # -----------------------------
 # Define number of neighbors to sample at each GraphSAGE layer (2 layers)
-num_neighbors = {etype: [10, 10] for etype in train_graph.edge_types}  # adjust 10→other number if needed
+num_neighbors = {etype: [5, 5] for etype in train_graph.edge_types}  # adjust 10→other number if needed
 
 train_loader = NeighborLoader(
     train_graph,
-    input_nodes=("node", train_idx),  # only nodes with labels
+    input_nodes=("node", train_idx_split),  # only train split nodes
     num_neighbors=num_neighbors,      # neighbors per layer per edge type
-    batch_size=64,                    # adjust based on GPU memory
+    batch_size=16,                    # adjust based on GPU memory
     shuffle=True
 )
 
 print("Starting neighborhood mini-batch training...")
-for epoch in range(1, 51):
+best_val_loss = float("inf")
+best_state = None
+patience = 100
+patience_left = patience
+for epoch in range(1, 2001):
     model.train()
     total_loss = 0
     for batch in train_loader:
@@ -212,9 +231,28 @@ for epoch in range(1, 51):
         optimizer.step()
         total_loss += loss.item()
     
+    # Validation on full graph (val nodes only)
+    model.eval()
+    with torch.no_grad():
+        val_logits = model(train_graph.x_dict, train_graph.edge_index_dict)["node"]
+        val_loss = criterion(val_logits[val_idx_split.to(device)], y[val_idx_split.to(device)]).item()
+
+    if val_loss < best_val_loss:
+        best_val_loss = val_loss
+        best_state = {k: v.detach().cpu().clone() for k, v in model.state_dict().items()}
+        patience_left = patience
+    else:
+        patience_left -= 1
+
     if epoch % 5 == 0:
         avg_loss = total_loss / len(train_loader)
-        print(f"Epoch {epoch:02d} | Avg Loss: {avg_loss:.4f}")
+        print(f"Epoch {epoch:02d} | Avg Loss: {avg_loss:.4f} | Val Loss: {val_loss:.4f}")
+    if patience_left == 0:
+        print(f"Early stopping at epoch {epoch:02d} (best val loss: {best_val_loss:.4f})")
+        break
+
+if best_state is not None:
+    model.load_state_dict(best_state)
 
 
 
@@ -293,46 +331,52 @@ low_conf_mask = max_conf < 0.7
 print(f"   Low confidence (<0.70): {low_conf_mask.sum()} predictions ({low_conf_mask.sum()/len(preds)*100:.1f}%)")
 
 # Test set evaluation against true labels
-print("\n" + "="*70)
-print("  📊 TEST SET EVALUATION METRICS (Against True Labels)")
-print("="*70)
+if test_labels is not None:
+    print("\n" + "="*70)
+    print("  📊 TEST SET EVALUATION METRICS (Against True Labels)")
+    print("="*70)
 
-# Get true labels for test set (aligned with test_df order)
-test_true = test_labels.iloc[:, 0].values.astype(int)
+    # Get true labels for test set (aligned with test_df order)
+    test_true = test_labels.iloc[:, 0].values.astype(int)
 
-test_acc = accuracy_score(test_true, preds)
-test_prec = precision_score(test_true, preds, zero_division=0)
-test_rec = recall_score(test_true, preds, zero_division=0)
-test_f1 = f1_score(test_true, preds, zero_division=0)
-test_cm = confusion_matrix(test_true, preds)
+    test_acc = accuracy_score(test_true, preds)
+    test_prec = precision_score(test_true, preds, zero_division=0)
+    test_rec = recall_score(test_true, preds, zero_division=0)
+    test_f1 = f1_score(test_true, preds, zero_division=0)
+    test_cm = confusion_matrix(test_true, preds)
 
-print(f"\n  Accuracy:     {test_acc:.4f}")
-print(f"  Precision:    {test_prec:.4f}")
-print(f"  Recall:       {test_rec:.4f}")
-print(f"  F1-Score:     {test_f1:.4f}")
-print(f"\n  Confusion Matrix:")
-print(f"     TN={test_cm[0,0]:3d}  FP={test_cm[0,1]:3d}")
-print(f"     FN={test_cm[1,0]:3d}  TP={test_cm[1,1]:3d}")
+    print(f"\n  Accuracy:     {test_acc:.4f}")
+    print(f"  Precision:    {test_prec:.4f}")
+    print(f"  Recall:       {test_rec:.4f}")
+    print(f"  F1-Score:     {test_f1:.4f}")
+    print(f"\n  Confusion Matrix:")
+    print(f"     TN={test_cm[0,0]:3d}  FP={test_cm[0,1]:3d}")
+    print(f"     FN={test_cm[1,0]:3d}  TP={test_cm[1,1]:3d}")
 
+    # Test set prediction breakdown by class
+    print(f"\n📊 Prediction Breakdown by True Label:")
+    print(f"   True Class 0 samples: {(test_true == 0).sum()} nodes")
+    print(f"   True Class 1 samples: {(test_true == 1).sum()} nodes")
 
-# Test set prediction breakdown by class
-print(f"\n📊 Prediction Breakdown by True Label:")
-print(f"   True Class 0 samples: {(test_true == 0).sum()} nodes")
-print(f"   True Class 1 samples: {(test_true == 1).sum()} nodes")
+    # Breakdown by correct/incorrect predictions
+    correct_mask = preds == test_true
+    incorrect_mask = preds != test_true
 
-# Breakdown by correct/incorrect predictions
-correct_mask = preds == test_true
-incorrect_mask = preds != test_true
+    print(f"\n   Correct predictions: {correct_mask.sum()} ({correct_mask.sum()/len(preds)*100:.1f}%)")
+    print(f"   Incorrect predictions: {incorrect_mask.sum()} ({incorrect_mask.sum()/len(preds)*100:.1f}%)")
 
-print(f"\n   Correct predictions: {correct_mask.sum()} ({correct_mask.sum()/len(preds)*100:.1f}%)")
-print(f"   Incorrect predictions: {incorrect_mask.sum()} ({incorrect_mask.sum()/len(preds)*100:.1f}%)")
+    if correct_mask.sum() > 0:
+        print(f"   Mean confidence (correct): {max_conf[correct_mask].mean():.4f}")
+    if incorrect_mask.sum() > 0:
+        print(f"   Mean confidence (incorrect): {max_conf[incorrect_mask].mean():.4f}")
 
-if correct_mask.sum() > 0:
-    print(f"   Mean confidence (correct): {max_conf[correct_mask].mean():.4f}")
-if incorrect_mask.sum() > 0:
-    print(f"   Mean confidence (incorrect): {max_conf[incorrect_mask].mean():.4f}")
-
-print("\n" + "="*70)
+    print("\n" + "="*70)
+else:
+    print("\n" + "="*70)
+    print("  📊 TEST SET EVALUATION METRICS")
+    print("="*70)
+    print("  ⚠️  test_labels.csv not found. Skipping test-set evaluation.")
+    print("\n" + "="*70)
 
 # -----------------------------
 # 10. Save predictions
