@@ -21,6 +21,10 @@ DATA_DIR = Path("data")
 LEADERBOARD_CSV = Path("leaderboard/leaderboard.csv")
 LEADERBOARD_MD = Path("leaderboard.md")
 DOCS_LEADERBOARD_CSV = Path("docs/leaderboard.csv")
+ORGANIZER_SUBMISSIONS = [
+    ("submissions/advanced_gnn_preds.csv", "organizers", "advanced_gnn", "Advanced GNN (GraphSAGE)", "organizers"),
+    ("submissions/baseline_mlp_preds.csv", "organizers", "baseline_mlp", "Baseline MLP", "organizers"),
+]
 
 # Load ground truth
 TEST_LABELS = DATA_DIR / "test_labels.csv"
@@ -32,6 +36,38 @@ if test_labels.shape[1] == 0:
     raise ValueError("test_labels.csv must have at least one column with labels.")
 
 test_true = test_labels.iloc[:, 0].values.astype(int)
+
+# Sync organizer baseline predictions into inbox format if present.
+def _sync_organizer_submissions():
+    for src, team, run_id, model_name, model_type in ORGANIZER_SUBMISSIONS:
+        src_path = Path(src)
+        if not src_path.exists():
+            continue
+        out_dir = SUBMISSIONS_DIR / team / run_id
+        out_dir.mkdir(parents=True, exist_ok=True)
+        pred_out = out_dir / "predictions.csv"
+        meta_out = out_dir / "metadata.json"
+
+        with src_path.open(newline="") as f_in, pred_out.open("w", newline="") as f_out:
+            reader = csv.DictReader(f_in)
+            if "node_id" not in reader.fieldnames or "target" not in reader.fieldnames:
+                print(f"⚠️ Skipping {src}: expected columns node_id,target")
+                continue
+            writer = csv.DictWriter(f_out, fieldnames=["id", "y_pred"])
+            writer.writeheader()
+            for row in reader:
+                writer.writerow({"id": row["node_id"], "y_pred": row["target"]})
+
+        meta = {
+            "team": team,
+            "run_id": run_id,
+            "model_name": model_name,
+            "model_type": model_type,
+        }
+        with meta_out.open("w", encoding="utf-8") as f:
+            json.dump(meta, f, indent=2)
+
+_sync_organizer_submissions()
 
 # Ensure leaderboard CSV exists
 LEADERBOARD_CSV.parent.mkdir(parents=True, exist_ok=True)
