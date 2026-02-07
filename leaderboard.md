@@ -4,8 +4,8 @@
 
 | Rank | Team | Run | Model | Type | F1-Score | Accuracy | Precision | Recall | Date | Submitter |
 |------|------|-----|-------|------|----------|----------|-----------|--------|------|-----------|
-| 1 | organizers | advanced_gnn | Advanced GNN (GraphSAGE) | organizers | 0.8421 | 0.8387 | 0.8571 | 0.8276 | 2026-01-07 | organizers |
-| 2 | organizers | baseline_mlp | Baseline MLP | organizers | 0.7845 | 0.7742 | 0.8019 | 0.7597 | 2026-01-07 | organizers |
+| 1 | organizers | baseline_mlp | Baseline MLP | organizers | 0.3267 | 0.3333 | 0.2281 | 0.3023 | 2026-02-07 00:09 | participant |
+| 2 | organizers | advanced_gnn | Advanced GNN (GraphSAGE) | organizers | 0.3232 | 0.3604 | 0.1667 | 0.1628 | 2026-02-07 00:09 | participant |
 
 ## Notes
 - This leaderboard is auto-generated from `leaderboard/leaderboard.csv`.
