@@ -22,8 +22,8 @@ LEADERBOARD_CSV = Path("leaderboard/leaderboard.csv")
 LEADERBOARD_MD = Path("leaderboard.md")
 DOCS_LEADERBOARD_CSV = Path("docs/leaderboard.csv")
 ORGANIZER_SUBMISSIONS = [
-    ("submissions/advanced_gnn_preds.csv", "organizers", "advanced_gnn", "Advanced GNN (GraphSAGE)", "organizers"),
-    ("submissions/baseline_mlp_preds.csv", "organizers", "baseline_mlp", "Baseline MLP", "organizers"),
+    ("submissions/advanced_gnn_preds.csv", "organizers", "advanced_gnn", "Advanced GNN (GraphSAGE)", "organizers", "mubarraqqq"),
+    ("submissions/baseline_mlp_preds.csv", "organizers", "baseline_mlp", "Baseline MLP", "organizers", "mubarraqqq"),
 ]
 
 # Load ground truth
@@ -39,7 +39,7 @@ test_true = test_labels.iloc[:, 0].values.astype(int)
 
 # Sync organizer baseline predictions into inbox format if present.
 def _sync_organizer_submissions():
-    for src, team, run_id, model_name, model_type in ORGANIZER_SUBMISSIONS:
+    for src, team, run_id, model_name, model_type, submitter in ORGANIZER_SUBMISSIONS:
         src_path = Path(src)
         if not src_path.exists():
             continue
@@ -63,6 +63,7 @@ def _sync_organizer_submissions():
             "run_id": run_id,
             "model_name": model_name,
             "model_type": model_type,
+            "submitter": submitter,
         }
         with meta_out.open("w", encoding="utf-8") as f:
             json.dump(meta, f, indent=2)
