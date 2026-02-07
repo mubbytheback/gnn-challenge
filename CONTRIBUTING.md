@@ -1,6 +1,6 @@
 # Contributing Submissions to GNN Challenge
 
-This repository accepts **prediction files only**. No participant code is executed.
+This [repository](https://github.com/Mubarraqqq/gnn-challenge) accepts **prediction files only**. No participant code is executed.
 
 ## Quick Start (External Participants)
 
