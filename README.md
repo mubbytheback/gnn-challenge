@@ -101,15 +101,8 @@
 
 ---
 
-## Submission Format (Automated)
-
-Submissions must include:
-- `submissions/inbox/<team>/<run_id>/predictions.csv` with columns `id`, `y_pred`
-- `submissions/inbox/<team>/<run_id>/metadata.json`
-
-Public test IDs are available in `data/public/test_nodes.csv`.
-
-Interactive leaderboard: `docs/leaderboard.html` (GitHub Pages).
+## Competition !!!
+Check [here](https://github.com/Mubarraqqq/gnn-challenge/blob/main/CONTRIBUTING.md) to participate in this niche challenge
 
 ## 📝 Citation
 
