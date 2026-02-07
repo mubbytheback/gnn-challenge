@@ -60,8 +60,6 @@ Notes:
 ## Leaderboard
 
 Your submission can be viewed [here](https://mubarraqqq.github.io/gnn-challenge/leaderboard.html) after PR has been merged by the [organizer](www.github.com/mubarraqqq)
-Primary metric: **Macro F1**  
-Also reported: Accuracy, Precision, Recall.
 
 ---
 
