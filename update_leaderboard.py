@@ -92,12 +92,6 @@ if not LEADERBOARD_CSV.exists():
 
 leaderboard_df = pd.read_csv(LEADERBOARD_CSV)
 
-# Track existing submissions to avoid duplicates
-existing_keys = set()
-if not leaderboard_df.empty:
-    for _, row in leaderboard_df.iterrows():
-        existing_keys.add((str(row.get("team", "")), str(row.get("run_id", ""))))
-
 # Find submissions
 submission_files = list(SUBMISSIONS_DIR.glob("*/*/predictions.csv"))
 print(f"🔍 Found {len(submission_files)} submission file(s) in submissions/inbox")
@@ -108,9 +102,6 @@ for pred_path in submission_files:
     team = pred_path.parent.parent.name
     run_id = pred_path.parent.name
     key = (team, run_id)
-
-    if key in existing_keys:
-        continue
 
     meta_path = pred_path.parent / "metadata.json"
     if not meta_path.exists():
@@ -174,11 +165,11 @@ for pred_path in submission_files:
     })
 
 if not new_rows:
-    print("⚠️ No new valid submissions to add.")
+    print("⚠️ No valid submissions found in inbox.")
     exit(0)
 
-# Append and re-rank
-updated_df = pd.concat([leaderboard_df, pd.DataFrame(new_rows)], ignore_index=True)
+# Rebuild from inbox and re-rank
+updated_df = pd.DataFrame(new_rows)
 updated_df = updated_df.sort_values(by=["f1_score", "accuracy"], ascending=False, ignore_index=True)
 updated_df["rank"] = range(1, len(updated_df) + 1)
 
