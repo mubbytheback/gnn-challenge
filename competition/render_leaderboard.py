@@ -25,6 +25,9 @@ lines = [
 ]
 
 for _, row in leaderboard.iterrows():
+    submitter = row.get("submitter", "")
+    submitter_url = row.get("submitter_url", "")
+    submitter_md = f"[{submitter}]({submitter_url})" if submitter and submitter_url else submitter
     lines.append(
         "| {rank} | {team} | {run_id} | {model} | {model_type} | {f1_score:.4f} | {accuracy:.4f} | {precision:.4f} | {recall:.4f} | {submission_date} | {submitter} |".format(
             rank=int(row["rank"]),
@@ -37,7 +40,7 @@ for _, row in leaderboard.iterrows():
             precision=row["precision"],
             recall=row["recall"],
             submission_date=row["submission_date"],
-            submitter=row["submitter"],
+            submitter=submitter_md,
         )
     )
 

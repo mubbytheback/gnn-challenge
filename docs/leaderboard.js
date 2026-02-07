@@ -22,6 +22,10 @@ function renderTable(rows) {
   const tbody = document.querySelector('#leaderboard tbody');
   tbody.innerHTML = '';
   rows.forEach(row => {
+    const submitter = row.submitter || '';
+    const submitterLink = submitter
+      ? `<a href="https://github.com/${submitter}" target="_blank" rel="noopener noreferrer">${submitter}</a>`
+      : '';
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td>${row.rank}</td>
@@ -34,7 +38,7 @@ function renderTable(rows) {
       <td>${Number(row.precision).toFixed(4)}</td>
       <td>${Number(row.recall).toFixed(4)}</td>
       <td>${row.submission_date}</td>
-      <td>${row.submitter}</td>
+      <td>${submitterLink}</td>
     `;
     tbody.appendChild(tr);
   });

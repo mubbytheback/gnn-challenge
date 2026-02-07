@@ -125,10 +125,61 @@ Your submission will be scored on:
 
 View the [leaderboard.md](leaderboard.md) for current rankings.
 
+## External Participants (End-to-End)
+
+Here’s the clean external participant flow you can share:
+
+1) **Fork the repo**  
+Click **Fork** on GitHub.
+
+2) **Clone their fork**:
+   ```bash
+   git clone https://github.com/<their-username>/gnn-challenge.git
+   cd gnn-challenge
+   ```
+
+3) **Create a submission branch**:
+   ```bash
+   git checkout -b submission/my-model
+   ```
+
+4) **Train model and generate predictions**  
+Use `train.csv` + `test.csv`.  
+Create `predictions.csv` with columns: `id`, `y_pred`  
+(IDs must match `test_nodes.csv`).
+
+5) **Create submission folder**:
+```
+submissions/inbox/<team>/<run_id>/predictions.csv
+submissions/inbox/<team>/<run_id>/metadata.json
+```
+
+Example `metadata.json`:
+```json
+{
+  "team": "my_team",
+  "run_id": "run_001",
+  "model_name": "My GNN v1",
+  "model_type": "human"
+}
+```
+
+6) **Commit + push**:
+   ```bash
+   git add submissions/inbox/<team>/<run_id>/predictions.csv
+   git add submissions/inbox/<team>/<run_id>/metadata.json
+   git commit -m "Add submission: My GNN v1"
+   git push origin submission/my-model
+   ```
+
+7) **Open a PR to your main repo**  
+GitHub Actions will validate + score it.  
+On merge, leaderboard updates automatically.
+
 ## Common Approaches
 
 
-### Approach 1: Deep Learning MLP
+### Approach 1: Deep Learning MLP using PyTorch
 ```python
 import torch.nn as nn
 

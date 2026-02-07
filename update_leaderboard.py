@@ -86,11 +86,17 @@ if not LEADERBOARD_CSV.exists():
             "recall",
             "submission_date",
             "submitter",
+            "submitter_url",
             "pr_number",
             "submission_path",
         ])
 
 leaderboard_df = pd.read_csv(LEADERBOARD_CSV)
+prev_by_key = {}
+if not leaderboard_df.empty:
+    for _, row in leaderboard_df.iterrows():
+        key = (str(row.get("team", "")), str(row.get("run_id", "")))
+        prev_by_key[key] = row
 
 # Find submissions
 submission_files = list(SUBMISSIONS_DIR.glob("*/*/predictions.csv"))
@@ -148,6 +154,25 @@ for pred_path in submission_files:
     model_name = meta.get("model_name", f"{team}-{run_id}")
     model_type = meta.get("model_type", "unknown")
 
+    key = (team, run_id)
+    submitter = meta.get("submitter", "participant")
+    submitter_url = f"https://github.com/{submitter}" if submitter else ""
+
+    prev = prev_by_key.get(key)
+    metrics_unchanged = False
+    if prev is not None:
+        try:
+            metrics_unchanged = (
+                abs(float(prev["f1_score"]) - f1) < 1e-9
+                and abs(float(prev["accuracy"]) - acc) < 1e-9
+                and abs(float(prev["precision"]) - prec) < 1e-9
+                and abs(float(prev["recall"]) - rec) < 1e-9
+            )
+        except Exception:
+            metrics_unchanged = False
+
+    submission_date = prev["submission_date"] if (metrics_unchanged and prev is not None) else datetime.now().strftime("%Y-%m-%d %H:%M")
+
     new_rows.append({
         "rank": 0,
         "team": team,
@@ -158,8 +183,9 @@ for pred_path in submission_files:
         "accuracy": acc,
         "precision": prec,
         "recall": rec,
-        "submission_date": datetime.now().strftime("%Y-%m-%d %H:%M"),
-        "submitter": meta.get("submitter", "participant"),
+        "submission_date": submission_date,
+        "submitter": submitter,
+        "submitter_url": submitter_url,
         "pr_number": meta.get("pr_number", ""),
         "submission_path": str(pred_path),
     })
