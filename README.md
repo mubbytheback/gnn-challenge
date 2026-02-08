@@ -128,6 +128,6 @@ See [LICENSE](LICENSE) file for details.
 **Challenge Status**: ✅ Active  
 **Leaderboard**: Live & Auto-updating  
 **Submissions**: Open via GitHub PRs  
-**Last Updated**: January 7, 2026
+**First Updated**: January 7, 2026
 
 **Good luck! 🚀 We look forward to your submissions!**
