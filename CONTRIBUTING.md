@@ -12,7 +12,7 @@ cd gnn-challenge
 ```
 3) **Create a branch**:
 ```bash
-git checkout -b submission/my-model
+git checkout -b new_submission
 ```
 4) **Train your model** using `data/public/train.csv` and generate predictions for `data/public/test.csv`.
    - Create `predictions.csv` with columns: `id`, `y_pred`.
