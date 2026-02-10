@@ -158,6 +158,32 @@ def evaluate_submission(submission_path, ground_truth_path=None):
     
     # Load ground truth
     ground_truth = pd.read_csv(ground_truth_path)
+
+    # Normalize ground truth columns/index
+    if "node_id" not in ground_truth.columns:
+        if "id" in ground_truth.columns:
+            ground_truth = ground_truth.rename(columns={"id": "node_id"})
+        elif ground_truth.index.name in {"node_id", "id"}:
+            ground_truth = ground_truth.reset_index()
+            if "id" in ground_truth.columns and "node_id" not in ground_truth.columns:
+                ground_truth = ground_truth.rename(columns={"id": "node_id"})
+        else:
+            first_col = ground_truth.columns[0] if len(ground_truth.columns) > 0 else None
+            if first_col and str(first_col).startswith("Unnamed"):
+                ground_truth = ground_truth.rename(columns={first_col: "node_id"})
+
+    if "target" not in ground_truth.columns:
+        if "y_true" in ground_truth.columns:
+            ground_truth = ground_truth.rename(columns={"y_true": "target"})
+        elif "label" in ground_truth.columns:
+            ground_truth = ground_truth.rename(columns={"label": "target"})
+        elif "disease_labels" in ground_truth.columns:
+            ground_truth = ground_truth.rename(columns={"disease_labels": "target"})
+
+    if "node_id" not in ground_truth.columns or "target" not in ground_truth.columns:
+        print("❌ Ground truth must have a node id column and a target/label column")
+        print(f"   Columns found: {list(ground_truth.columns)}")
+        return None
     
     # Merge on node_id
     merged = pd.merge(ground_truth, submission, on='node_id', suffixes=('_true', '_pred'))
