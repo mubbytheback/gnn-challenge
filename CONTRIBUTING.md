@@ -39,7 +39,7 @@ Example `metadata.json`:
 git add submissions/inbox/<team>/<run_id>/predictions.csv
 git add submissions/inbox/<team>/<run_id>/metadata.json
 git commit -m "Add submission: My GNN v1"
-git push origin submission/my-model
+git push origin new_submission
 ```
 
 7) **Open a PR** to the main repo. CI validates + scores. On merge, the leaderboard updates.
