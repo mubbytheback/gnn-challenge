@@ -199,6 +199,10 @@ def evaluate_submission(submission_path, ground_truth_path=None):
             print(f"   Columns found: {list(ground_truth.columns)}")
             return None
     
+    # Ensure node_id types align
+    ground_truth["node_id"] = ground_truth["node_id"].astype(str)
+    submission["node_id"] = submission["node_id"].astype(str)
+
     # Merge on node_id
     merged = pd.merge(ground_truth, submission, on='node_id', suffixes=('_true', '_pred'))
     
