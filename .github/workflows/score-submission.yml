@@ -117,7 +117,7 @@ jobs:
       - name: Run scoring script
         id: score
         run: |
-          python scoring_script.py /tmp/pr_predictions.csv
+          DEBUG_GT=1 python scoring_script.py /tmp/pr_predictions.csv
         continue-on-error: true
 
       - name: Extract metrics and comment

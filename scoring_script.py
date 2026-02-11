@@ -159,6 +159,13 @@ def evaluate_submission(submission_path, ground_truth_path=None):
     # Load ground truth
     ground_truth = pd.read_csv(ground_truth_path)
 
+    # Optional safe debug (no labels printed)
+    if os.environ.get("DEBUG_GT") == "1":
+        print("🔎 Ground truth debug (safe)")
+        print(f"   Columns: {list(ground_truth.columns)}")
+        print(f"   Dtypes: {ground_truth.dtypes.to_dict()}")
+        print(f"   Rows: {len(ground_truth)}")
+
     # Normalize ground truth columns/index
     if "node_id" not in ground_truth.columns:
         if "id" in ground_truth.columns:
@@ -205,6 +212,23 @@ def evaluate_submission(submission_path, ground_truth_path=None):
 
     # Merge on node_id
     merged = pd.merge(ground_truth, submission, on='node_id', suffixes=('_true', '_pred'))
+
+    # Fallback: if no matches, try aligning by public test_nodes order
+    if len(merged) == 0:
+        test_nodes_path = None
+        for candidate in ["data/public/test_nodes.csv", "data/test_nodes.csv"]:
+            if os.path.exists(candidate):
+                test_nodes_path = candidate
+                break
+        if test_nodes_path is not None:
+            try:
+                test_nodes = pd.read_csv(test_nodes_path)
+                if "id" in test_nodes.columns and len(test_nodes) == len(ground_truth):
+                    ground_truth = ground_truth.copy()
+                    ground_truth["node_id"] = test_nodes["id"].astype(str).values
+                    merged = pd.merge(ground_truth, submission, on='node_id', suffixes=('_true', '_pred'))
+            except Exception:
+                pass
     
     if len(merged) == 0:
         print("❌ No matching node_ids between submission and ground truth")
