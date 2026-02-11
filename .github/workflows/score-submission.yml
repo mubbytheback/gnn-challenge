@@ -151,14 +151,18 @@ jobs:
           # Merge submitter info into metadata.json
           python - <<'PY'
           import json
+          import os
           meta_path = "submissions/inbox/${TEAM}/${RUN_ID}/metadata.json"
           try:
               with open("/tmp/pr_metadata.json", "r", encoding="utf-8") as f:
                   meta = json.load(f)
           except Exception:
               meta = {}
-          meta["submitter"] = "${SUBMITTER}"
-          meta["pr_number"] = "${PR_NUMBER}"
+          meta["submitter"] = os.environ.get("SUBMITTER", "")
+          meta["pr_number"] = os.environ.get("PR_NUMBER", "")
+          team = os.environ.get("TEAM", "")
+          run_id = os.environ.get("RUN_ID", "")
+          meta_path = f"submissions/inbox/{team}/{run_id}/metadata.json"
           with open(meta_path, "w", encoding="utf-8") as f:
               json.dump(meta, f, indent=2)
           PY
