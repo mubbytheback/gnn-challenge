@@ -2,6 +2,7 @@ name: Score Submission
 
 on:
   pull_request_target:
+    types: [opened, reopened, synchronize, closed]
     paths:
       - 'submissions/inbox/**'
   workflow_dispatch:
