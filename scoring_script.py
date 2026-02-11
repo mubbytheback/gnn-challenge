@@ -169,7 +169,10 @@ def evaluate_submission(submission_path, ground_truth_path=None):
                 ground_truth = ground_truth.rename(columns={"id": "node_id"})
         else:
             first_col = ground_truth.columns[0] if len(ground_truth.columns) > 0 else None
-            if first_col and str(first_col).startswith("Unnamed"):
+            if first_col is not None and str(first_col).startswith("Unnamed"):
+                ground_truth = ground_truth.rename(columns={first_col: "node_id"})
+            elif first_col is not None and isinstance(first_col, (int, np.integer)):
+                # Likely headerless CSV; assume first column is node_id
                 ground_truth = ground_truth.rename(columns={first_col: "node_id"})
 
     if "target" not in ground_truth.columns:
@@ -179,11 +182,22 @@ def evaluate_submission(submission_path, ground_truth_path=None):
             ground_truth = ground_truth.rename(columns={"label": "target"})
         elif "disease_labels" in ground_truth.columns:
             ground_truth = ground_truth.rename(columns={"disease_labels": "target"})
+        elif len(ground_truth.columns) >= 2 and "node_id" in ground_truth.columns:
+            # If only node_id was named, assume the next column is target
+            remaining = [c for c in ground_truth.columns if c != "node_id"]
+            if remaining:
+                ground_truth = ground_truth.rename(columns={remaining[0]: "target"})
 
     if "node_id" not in ground_truth.columns or "target" not in ground_truth.columns:
-        print("❌ Ground truth must have a node id column and a target/label column")
-        print(f"   Columns found: {list(ground_truth.columns)}")
-        return None
+        # Final fallback: treat index as node_id and first column as target
+        if "target" not in ground_truth.columns and len(ground_truth.columns) == 1:
+            ground_truth = ground_truth.reset_index().rename(columns={"index": "node_id", ground_truth.columns[0]: "target"})
+        if "node_id" in ground_truth.columns and "target" in ground_truth.columns:
+            pass
+        else:
+            print("❌ Ground truth must have a node id column and a target/label column")
+            print(f"   Columns found: {list(ground_truth.columns)}")
+            return None
     
     # Merge on node_id
     merged = pd.merge(ground_truth, submission, on='node_id', suffixes=('_true', '_pred'))
